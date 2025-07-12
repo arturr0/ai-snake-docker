@@ -269,7 +269,7 @@ bool aiMove(int& dir) {
                     case 2: --ty; break;
                     case 3: ++ty; break;
                 }
-                if (isValidPosition(tx, ty) {
+                if (isValidPosition(tx, ty)) {
                     safe_actions.push_back(i);
                 }
             }
