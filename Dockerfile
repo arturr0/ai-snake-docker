@@ -4,21 +4,18 @@ FROM emscripten/emsdk:3.1.45 as builder
 WORKDIR /app
 COPY . .
 
-# Install essential dependencies
+# Install basic build tools
 RUN apt-get update && \
-    apt-get install -y \
-    cmake \
-    ninja-build \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y cmake ninja-build && \
+    rm -rf /var/lib/apt/lists/*
 
-# Build with detailed logging
-RUN mkdir -p build && cd build && \
-    emcmake cmake .. \
-    -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    ninja -v
+# Build with verbose output
+RUN mkdir -p build && \
+    cd build && \
+    emcmake cmake .. -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
+    cmake --build . --verbose
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.25-alpine
