@@ -10,9 +10,9 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 // #include <SDL2/SDL.h>
-// #else
+#else
 // #include <windows.h>
-// #endif
+#endif  // <-- This was missing
 
 #ifdef __EMSCRIPTEN__
 #include <SDL2/SDL.h>
