@@ -10,7 +10,6 @@ if(EMSCRIPTEN)
     add_compile_options(
         -O3
         -sUSE_SDL=2
-        -sUSE_SDL_IMAGE=2
         -sALLOW_MEMORY_GROWTH=1
         -sMAXIMUM_MEMORY=256MB
         -sINITIAL_MEMORY=64MB
@@ -25,9 +24,7 @@ if(EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
     set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL_IMAGE=2")
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main']")
+        "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']")
 else()
