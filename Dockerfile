@@ -22,7 +22,6 @@ FROM nginx:1.25-alpine
 
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
-COPY --from=builder /app/build/aisnake_web.data /usr/share/nginx/html/
-COPY shell.html /usr/share/nginx/html/index.html
+COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/index.html
 
 EXPOSE 80
