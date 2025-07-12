@@ -200,6 +200,8 @@ void initSDL() {
 
     // Set basic renderer properties
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    // SDL_RenderSetLogicalSize is not available in Emscripten's SDL
+    // Removed this line as it was causing compilation errors
 }
 
    
