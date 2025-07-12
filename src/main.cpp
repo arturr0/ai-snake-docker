@@ -9,6 +9,10 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
+
+EM_JS(void, export_functions, (), {
+    Module['getExplorationRate'] = Module.cwrap('getExplorationRate', 'number', []);
+});
 #endif
 
 using namespace std;
@@ -86,19 +90,85 @@ EM_JS(void, initChartJS, (), {
         var qValueCanvas = document.createElement('canvas');
         qValueCanvas.id = 'qValueChart';
         container.appendChild(qValueCanvas);
+
+        window.scoreChart = new Chart(scoreCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Score',
+                    data: [],
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        window.qValueChart = new Chart(qValueCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Q Value',
+                    data: [],
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
     });
 });
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration), {
-    var statusElement = document.getElementById('status');
-    if (statusElement) {
-        statusElement.innerHTML = 
-            `Episode: ${episode} | Score: ${score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
+    try {
+        var statusElement = document.getElementById('status');
+        if (statusElement) {
+            statusElement.innerHTML = 
+                `Episode: ${episode} | Score: ${score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
+        }
+        
+        if (window.scoreChart && window.qValueChart) {
+            // Update score chart
+            window.scoreChart.data.labels.push(episode);
+            window.scoreChart.data.datasets[0].data.push(score);
+            window.scoreChart.update();
+            
+            // Update Q value chart
+            window.qValueChart.data.labels.push(episode);
+            window.qValueChart.data.datasets[0].data.push(avg_q);
+            window.qValueChart.update();
+        }
+    } catch(e) {
+        console.error('Chart update error:', e);
     }
 });
 #endif
 
-// Helper functions
+extern "C" {
+    EMSCRIPTEN_KEEPALIVE
+    float getExplorationRate() {
+        return q_learning.exploration_rate;
+    }
+}
+
 vector<vector<int>> generateAllPositions() {
     vector<vector<int>> positions(WIDTH * HEIGHT, vector<int>(2));
     int idx = 0;
@@ -131,15 +201,10 @@ bool isBodyPosition(int x, int y) {
     return false;
 }
 
-// Q-learning functions
 void initQTable() {
-    // State space: (x, y, direction, food_dir, danger)
-    // Total states: WIDTH * HEIGHT * 4 * 16 * 16
-    // We'll use a sparse representation
-    q_learning.table.resize(WIDTH * HEIGHT * 1024); // Reduced state space
+    q_learning.table.resize(WIDTH * HEIGHT * 1024);
     for (auto& row : q_learning.table) {
         row.assign(4, 0.0f);
-        // Small positive bias to encourage exploration
         for (float& val : row) {
             val = (rand() % 100) / 1000.0f - 0.01f;
         }
@@ -149,31 +214,26 @@ void initQTable() {
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
     
-    // Calculate relative food position (4 directions)
     int food_dir = 0;
-    if (game.food_x > x) food_dir = 1; // Food is below
-    else if (game.food_x < x) food_dir = 2; // Food is above
-    if (game.food_y > y) food_dir |= 4; // Food is right
-    else if (game.food_y < y) food_dir |= 8; // Food is left
+    if (game.food_x > x) food_dir = 1;
+    else if (game.food_x < x) food_dir = 2;
+    if (game.food_y > y) food_dir |= 4;
+    else if (game.food_y < y) food_dir |= 8;
     
-    // Calculate danger directions (4 directions)
     int danger = 0;
-    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y)) danger |= 1; // Up
-    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y)) danger |= 2; // Down
-    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1)) danger |= 4; // Left
-    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1)) danger |= 8; // Right
+    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y)) danger |= 1;
+    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y)) danger |= 2;
+    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1)) danger |= 4;
+    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1)) danger |= 8;
     
-    // Combine into state index
     return (y * WIDTH + x) * 256 + dir * 64 + food_dir * 4 + danger;
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    // Exploration: random action
     if (static_cast<float>(rand()) / RAND_MAX < q_learning.exploration_rate) {
         return rand() % 4;
     }
 
-    // Exploitation: best known action
     int state = getStateIndex(x, y, current_dir);
     if (state >= 0 && state < q_learning.table.size()) {
         return distance(q_learning.table[state].begin(),
@@ -197,18 +257,15 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     if (crashed) return -100.0f;
     if (got_food) return 50.0f;
     
-    // Reward for moving toward food
     float prev_dist = sqrtf((prev_x-game.food_x)*(prev_x-game.food_x) + 
                      (prev_y-game.food_y)*(prev_y-game.food_y));
     float new_dist = sqrtf((x-game.food_x)*(x-game.food_x) + 
                     (y-game.food_y)*(y-game.food_y));
     float dist_reward = (prev_dist - new_dist) * 5.0f;
     
-    // Small positive reward for staying alive
     return dist_reward + 0.1f;
 }
 
-// Game functions
 void resetGame() {
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
@@ -249,10 +306,10 @@ bool moveSnake(int& direction) {
         
         int new_x = game.head_x, new_y = game.head_y;
         switch (action) {
-            case 0: new_x--; break; // Up
-            case 1: new_x++; break; // Down
-            case 2: new_y--; break; // Left
-            case 3: new_y++; break; // Right
+            case 0: new_x--; break;
+            case 1: new_x++; break;
+            case 2: new_y--; break;
+            case 3: new_y++; break;
         }
 
         bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y);
@@ -288,7 +345,6 @@ bool moveSnake(int& direction) {
         }
     }
 
-    // Execute the move
     switch (direction) {
         case 0: game.head_x--; break;
         case 1: game.head_x++; break;
@@ -296,12 +352,10 @@ bool moveSnake(int& direction) {
         case 3: game.head_y++; break;
     }
 
-    // Check collision
     if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y)) {
         return true;
     }
 
-    // Update snake body
     game.trail.insert(game.trail.begin(), {game.head_x, game.head_y});
     if (game.trail.size() > game.length + 2) {
         game.trail.resize(game.length + 2);
@@ -312,7 +366,6 @@ bool moveSnake(int& direction) {
         game.body.resize(game.length + 1);
     }
 
-    // Check food
     if (game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
         game.length++;
@@ -322,7 +375,6 @@ bool moveSnake(int& direction) {
     return false;
 }
 
-// SDL functions
 void initSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         cerr << "SDL_Init Error: " << SDL_GetError() << endl;
@@ -357,21 +409,17 @@ void initSDL() {
 }
 
 void drawGame() {
-    // Clear screen
     SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
     SDL_RenderClear(sdl.renderer);
 
-    // Draw border
     SDL_SetRenderDrawColor(sdl.renderer, 50, 50, 50, 255);
     SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
     SDL_RenderDrawRect(sdl.renderer, &border);
 
-    // Draw food
     SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255);
     SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &food);
 
-    // Draw snake body
     SDL_SetRenderDrawColor(sdl.renderer, 0, 180, 0, 255);
     for (const auto& seg : game.body) {
         if (seg.size() == 2) {
@@ -380,7 +428,6 @@ void drawGame() {
         }
     }
 
-    // Draw snake head
     SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
     SDL_Rect head = {game.head_y * CELL_SIZE, game.head_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &head);
@@ -390,7 +437,6 @@ void drawGame() {
 
 void logPerformance() {
     if (q_learning.episodes % LOG_INTERVAL == 0) {
-        // Calculate average Q-value
         float total_q = 0;
         int count = 0;
         for (const auto& row : q_learning.table) {
@@ -414,12 +460,10 @@ void logPerformance() {
              << " | Exploration: " << q_learning.exploration_rate << endl;
         #endif
 
-        // Reset score for next episode
         game.score = 0;
     }
 }
 
-// Main game loop
 void mainLoop() {
     static int direction = rand() % 4;
     static int reset_timer = 0;
@@ -447,7 +491,6 @@ void mainLoop() {
     }
 }
 
-// Cleanup
 void cleanup() {
     SDL_DestroyRenderer(sdl.renderer);
     SDL_DestroyWindow(sdl.window);
@@ -462,7 +505,6 @@ int main() {
     initChartJS();
     #endif
 
-    // Initialize game state
     auto all_positions = generateAllPositions();
     game.body = {{HEIGHT/2, WIDTH/2}};
     game.trail = {{HEIGHT/2, WIDTH/2}};
@@ -472,10 +514,7 @@ int main() {
         game.food_y = free_positions[0][1];
     }
 
-    // Initialize Q-learning
     initQTable();
-    
-    // Initialize SDL
     initSDL();
 
     #ifdef __EMSCRIPTEN__
@@ -522,4 +561,3 @@ int main() {
     cleanup();
     return 0;
 }
-
