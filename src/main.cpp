@@ -276,7 +276,7 @@ int getStateIndex(int x, int y, int dir) {
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    if ((float)rand() / RAND_MAX < exploration_rate) {
+    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate) {
         return rand() % 4;
     }
 
