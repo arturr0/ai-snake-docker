@@ -14,6 +14,8 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sNO_EXIT_RUNTIME=1
         -sENVIRONMENT=web
+        -sMIN_WEBGL_VERSION=1
+        -sMAX_WEBGL_VERSION=1
     )
     
     # Linker flags
@@ -23,13 +25,14 @@ if(EMSCRIPTEN)
         "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL_IMAGE=2")
-    # Only export _main since we don't have _start_game
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sFORCE_FILESYSTEM=1")
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} -sUSE_GLFW=3")
 else()
     find_package(SDL2 REQUIRED)
     add_compile_options(-O3)
