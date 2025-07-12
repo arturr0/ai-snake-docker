@@ -286,7 +286,7 @@ bool aiMove(int& dir) {
         case 3: ++ai_poz; break;
     }
 
-    if (!isValidPosition(ai_pion, ai_poz) {
+    if (!isValidPosition(ai_pion, ai_poz)) {
         return true;
     }
 
