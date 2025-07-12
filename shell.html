@@ -63,5 +63,45 @@
     </div>
 
     {{{ SCRIPT }}}
+    <script>
+var Module = {
+    canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        // WebGL2 context creation fallback
+        var context = null;
+        try {
+            context = canvas.getContext('webgl2', {
+                antialias: false,
+                preserveDrawingBuffer: false,
+                powerPreference: "high-performance"
+            });
+        } catch (e) {
+            console.error("WebGL2 initialization failed:", e);
+        }
+        
+        if (!context) {
+            alert('WebGL2 is not supported in your browser. Please try Chrome, Firefox, or Edge.');
+            throw new Error('WebGL2 not supported');
+        }
+        
+        canvas.addEventListener('webglcontextlost', function(e) {
+            console.error('WebGL context lost');
+            e.preventDefault();
+            window.location.reload();
+        }, false);
+        
+        return canvas;
+    })(),
+    onRuntimeInitialized: function() {
+        document.getElementById('status').textContent = 'Game loaded - training started';
+    },
+    print: function(text) {
+        console.log(text);
+    },
+    printErr: function(text) {
+        console.error(text);
+    }
+};
+</script>
 </body>
 </html>
