@@ -8,6 +8,7 @@
 #include <SDL/SDL.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#endif
 #include <emscripten/html5.h>
 #endif
 
