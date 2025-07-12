@@ -39,7 +39,7 @@ float learning_rate = 0.3f;
 float discount_factor = 0.95f;
 float exploration_rate = 0.5f;
 int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 20000;
+const int MAX_TRAINING_EPISODES = 2000000;
 const float MIN_EXPLORATION = 0.01f;
 
 // Performance tracking
