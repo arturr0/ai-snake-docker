@@ -26,20 +26,20 @@ int food_x = 0, food_y = 0;
 bool ai_kolizja = false;
 int czas = 200;
 
-// AI snake data with bounds checking
+// AI snake data
 vector<vector<int>> ai_pozycja;
 vector<vector<int>> ai_pozycjac;
 vector<vector<int>> v1;
 
-// Q-learning with safe initialization
+// Q-learning
 vector<vector<float>> q_table;
-float learning_rate = 0.1f;
-float discount_factor = 0.9f;
-float exploration_rate = 0.3f;
+float learning_rate = 0.15f;  // Increased learning rate
+float discount_factor = 0.95f; // Increased discount factor
+float exploration_rate = 0.4f; // Higher initial exploration
 int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 1000;
+const int MAX_TRAINING_EPISODES = 5000; // More training episodes
 
-// SDL handles
+// SDL
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
@@ -80,28 +80,22 @@ void draw() {
     SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
     SDL_RenderDrawRect(renderer, &border);
 
-    // Draw food (with bounds check)
-    if (food_x >= 0 && food_x < HEIGHT && food_y >= 0 && food_y < WIDTH) {
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_Rect food = {food_y * CELL_SIZE, food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-        SDL_RenderFillRect(renderer, &food);
-    }
+    // Draw food
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    SDL_Rect food = {food_y * CELL_SIZE, food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+    SDL_RenderFillRect(renderer, &food);
 
-    // Draw snake body with bounds checking
+    // Draw snake body
     SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
     for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && seg[0] >= 0 && seg[0] < HEIGHT && seg[1] >= 0 && seg[1] < WIDTH) {
-            SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-            SDL_RenderFillRect(renderer, &body);
-        }
+        SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+        SDL_RenderFillRect(renderer, &body);
     }
 
-    // Draw snake head with bounds checking
-    if (ai_pion >= 0 && ai_pion < HEIGHT && ai_poz >= 0 && ai_poz < WIDTH) {
-        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-        SDL_Rect head = {ai_poz * CELL_SIZE, ai_pion * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-        SDL_RenderFillRect(renderer, &head);
-    }
+    // Draw snake head
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    SDL_Rect head = {ai_poz * CELL_SIZE, ai_pion * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+    SDL_RenderFillRect(renderer, &head);
 
     SDL_RenderPresent(renderer);
 }
@@ -111,10 +105,7 @@ vector<vector<int>> generuj() {
     int idx = 0;
     for (int i = 0; i < HEIGHT; ++i) {
         for (int j = 0; j < WIDTH; ++j, ++idx) {
-            if (idx < new_v1.size()) {
-                new_v1[idx][0] = i;
-                new_v1[idx][1] = j;
-            }
+            new_v1[idx] = {i, j};
         }
     }
     return new_v1;
@@ -130,9 +121,7 @@ vector<vector<int>> wolne(const vector<vector<int>>& snake, vector<vector<int>> 
 
 bool ai_urobos() {
     for (size_t i = 1; i < ai_pozycja.size(); ++i) {
-        if (i < ai_pozycja.size() && 
-            ai_pion == ai_pozycja[i][0] && 
-            ai_poz == ai_pozycja[i][1]) {
+        if (ai_pion == ai_pozycja[i][0] && ai_poz == ai_pozycja[i][1]) {
             return true;
         }
     }
@@ -145,7 +134,7 @@ bool isValidPosition(int x, int y) {
 
 bool isAIBody(int x, int y) {
     for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && seg[0] == x && seg[1] == y) {
+        if (seg[0] == x && seg[1] == y) {
             return true;
         }
     }
@@ -153,22 +142,36 @@ bool isAIBody(int x, int y) {
 }
 
 void initQTable() {
-    q_table.resize(WIDTH * HEIGHT * 4);
+    // State includes: position (x,y), direction, and distance to walls
+    q_table.resize(WIDTH * HEIGHT * 4 * 4); // 4 directions * 4 wall distances
     for (auto& row : q_table) {
         row.assign(4, 0.0f);
+        // Initialize with small negative values to discourage random moves
+        for (float& val : row) {
+            val = -0.1f;
+        }
+    }
+}
+
+int getWallDistance(int x, int y, int dir) {
+    switch(dir) {
+        case 0: return x;         // Distance to top wall
+        case 1: return HEIGHT-1-x; // Distance to bottom wall
+        case 2: return y;         // Distance to left wall
+        case 3: return WIDTH-1-y; // Distance to right wall
+        default: return 0;
     }
 }
 
 int getStateIndex(int x, int y, int dir) {
-    if (x < 0 || x >= HEIGHT || y < 0 || y >= WIDTH || dir < 0 || dir >= 4) {
-        return 0; // Return safe default index
-    }
-    return (y * WIDTH + x) * 4 + dir;
+    if (!isValidPosition(x, y)) return 0;
+    
+    int wall_dist = min(3, getWallDistance(x, y, dir)); // Quantize to 0-3
+    return ((y * WIDTH + x) * 4 + dir) * 4 + wall_dist;
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    if ((float)rand() / RAND_MAX < exploration_rate &&
-        training_episodes < MAX_TRAINING_EPISODES) {
+    if ((float)rand() / RAND_MAX < exploration_rate) {
         return rand() % 4;
     }
 
@@ -177,7 +180,7 @@ int chooseAction(int x, int y, int current_dir) {
         return (int)distance(q_table[state].begin(),
             max_element(q_table[state].begin(), q_table[state].end()));
     }
-    return rand() % 4; // Fallback to random action
+    return rand() % 4;
 }
 
 void updateQTable(int ox, int oy, int odir, int action, int nx, int ny, float reward) {
@@ -193,21 +196,18 @@ void updateQTable(int ox, int oy, int odir, int action, int nx, int ny, float re
 }
 
 float calculateReward(int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -50.0f;
-    if (got_food) return 100.0f;
+    if (crashed) return -100.0f; // Strong penalty for crashing
+    if (got_food) return 50.0f;  // Reward for getting food
     
-    if (!isValidPosition(x, y) || !isValidPosition(ai_pion, ai_poz)) {
-        return 0.0f;
-    }
+    // Penalize getting too close to walls
+    int min_wall_dist = min(min(x, HEIGHT-1-x), min(y, WIDTH-1-y));
+    if (min_wall_dist == 0) return -10.0f;
+    if (min_wall_dist == 1) return -2.0f;
     
-    float prev_dist = sqrtf((ai_pion-food_x)*(ai_pion-food_x) + 
-                         (ai_poz-food_y)*(ai_poz-food_y));
-    float new_dist = sqrtf((x-food_x)*(x-food_x) + 
-                        (y-food_y)*(y-food_y));
-    
-    if (new_dist < prev_dist) return 1.0f;
-    if (new_dist > prev_dist) return -1.0f;
-    return 0.0f;
+    // Reward/punish based on distance to food
+    float dist = sqrtf((x-food_x)*(x-food_x) + (y-food_y)*(y-food_y));
+    float max_dist = sqrtf(WIDTH*WIDTH + HEIGHT*HEIGHT);
+    return 1.0f - (dist / max_dist); // Closer = higher reward
 }
 
 void resetSnake() {
@@ -222,10 +222,8 @@ void resetSnake() {
     auto freeTiles = wolne(ai_pozycjac, v1);
     if (!freeTiles.empty()) {
         int k = rand() % freeTiles.size();
-        if (k < freeTiles.size()) {
-            food_x = freeTiles[k][0];
-            food_y = freeTiles[k][1];
-        }
+        food_x = freeTiles[k][0];
+        food_y = freeTiles[k][1];
     }
 }
 
@@ -242,10 +240,10 @@ bool aiMove(int& dir) {
         
         int nx = ai_pion, ny = ai_poz;
         switch (action) {
-            case 0: --nx; break;
-            case 1: ++nx; break;
-            case 2: --ny; break;
-            case 3: ++ny; break;
+            case 0: --nx; break; // up
+            case 1: ++nx; break; // down
+            case 2: --ny; break; // left
+            case 3: ++ny; break; // right
         }
 
         bool valid = isValidPosition(nx, ny) && !isAIBody(nx, ny);
@@ -253,13 +251,12 @@ bool aiMove(int& dir) {
         bool crash = !valid;
 
         float reward = calculateReward(nx, ny, gotFood, crash);
-        if (training_episodes < MAX_TRAINING_EPISODES) {
-            updateQTable(prev_x, prev_y, prev_dir, action, nx, ny, reward);
-        }
+        updateQTable(prev_x, prev_y, prev_dir, action, nx, ny, reward);
 
         if (valid) {
             dir = action;
         } else {
+            // Emergency avoidance - try to find any safe move
             vector<int> safe_actions;
             for (int i = 0; i < 4; i++) {
                 int tx = ai_pion, ty = ai_poz;
@@ -269,7 +266,7 @@ bool aiMove(int& dir) {
                     case 2: --ty; break;
                     case 3: ++ty; break;
                 }
-                if (isValidPosition(tx, ty)) {
+                if (isValidPosition(tx, ty) && !isAIBody(tx, ty)) {
                     safe_actions.push_back(i);
                 }
             }
@@ -279,6 +276,7 @@ bool aiMove(int& dir) {
         }
     }
 
+    // Execute move
     switch (dir) {
         case 0: --ai_pion; break;
         case 1: ++ai_pion; break;
@@ -286,28 +284,18 @@ bool aiMove(int& dir) {
         case 3: ++ai_poz; break;
     }
 
-    if (!isValidPosition(ai_pion, ai_poz)) {
+    // Check for collisions
+    if (!isValidPosition(ai_pion, ai_poz) || isAIBody(ai_pion, ai_poz)) {
         return true;
     }
 
-    // Check for self-collision
-    for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && ai_pion == seg[0] && ai_poz == seg[1]) {
-            return true;
-        }
-    }
-
     // Update positions
-    if (ai_pozycjac.size() < 100) { // Prevent excessive growth
-        ai_pozycjac.insert(ai_pozycjac.begin(), {ai_pion, ai_poz});
-    }
-    if (ai_pozycja.size() < 100) {
-        ai_pozycja.insert(ai_pozycja.begin(), {ai_pion, ai_poz});
-    }
-
+    ai_pozycjac.insert(ai_pozycjac.begin(), {ai_pion, ai_poz});
     if (ai_pozycjac.size() > ai_longer + 2) {
         ai_pozycjac.resize(ai_longer + 2);
     }
+
+    ai_pozycja.insert(ai_pozycja.begin(), {ai_pion, ai_poz});
     if (ai_pozycja.size() > ai_longer + 1) {
         ai_pozycja.resize(ai_longer + 1);
     }
@@ -319,11 +307,9 @@ bool aiMove(int& dir) {
         auto freeTiles = wolne(ai_pozycjac, v1);
         if (!freeTiles.empty()) {
             int k = rand() % freeTiles.size();
-            if (k < freeTiles.size()) {
-                food_x = freeTiles[k][0];
-                food_y = freeTiles[k][1];
-                ++ai_longer;
-            }
+            food_x = freeTiles[k][0];
+            food_y = freeTiles[k][1];
+            ++ai_longer;
         }
     }
 
@@ -347,7 +333,7 @@ void main_loop() {
 
     if (training_episodes < MAX_TRAINING_EPISODES) {
         ++training_episodes;
-        exploration_rate = max(0.05f, exploration_rate - 0.0005f);
+        exploration_rate = max(0.01f, exploration_rate * 0.9995f); // Slow decay
     }
 
     if (crashed) {
@@ -358,18 +344,15 @@ void main_loop() {
 int main() {
     srand((unsigned)time(nullptr));
 
-    // Initialize vectors with proper bounds
+    // Initialize
     v1 = generuj();
     ai_pozycja = {{HEIGHT/2, WIDTH/2}};
     ai_pozycjac = {{HEIGHT/2, WIDTH/2}};
     
     auto freeTiles = wolne(ai_pozycjac, v1);
     if (!freeTiles.empty()) {
-        int k = rand() % freeTiles.size();
-        if (k < freeTiles.size()) {
-            food_x = freeTiles[k][0];
-            food_y = freeTiles[k][1];
-        }
+        food_x = freeTiles[0][0];
+        food_y = freeTiles[0][1];
     }
 
     initQTable();
@@ -398,7 +381,7 @@ int main() {
 
         if (training_episodes < MAX_TRAINING_EPISODES) {
             ++training_episodes;
-            exploration_rate = max(0.05f, exploration_rate - 0.0005f);
+            exploration_rate = max(0.01f, exploration_rate * 0.9995f);
         }
 
         if (crashed) {
