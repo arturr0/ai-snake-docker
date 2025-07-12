@@ -46,41 +46,14 @@
     </div>
 
     <!-- This script block must come before the SCRIPT placeholder -->
-    <script>
-    // This will be merged with Emscripten's generated Module object
-    var Module = Module || {};
-    Module.canvas = (function() {
-        var canvas = document.getElementById('game-canvas');
-        canvas.addEventListener('webglcontextlost', function(e) {
-            alert('WebGL context lost. Please reload the page.');
-            e.preventDefault();
-        }, false);
-        return canvas;
-    })();
-    Module.onRuntimeInitialized = function() {
-        // Hide loading indicator
-        var loadingElement = document.getElementById('loading');
-        if (loadingElement) loadingElement.classList.add('hidden');
-        
-        // Show game elements
-        var statusElement = document.getElementById('status');
-        var canvasElement = document.getElementById('game-canvas');
-        
-        if (statusElement) {
-            statusElement.classList.remove('hidden');
-            statusElement.textContent = 'Game loaded - training started';
-        }
-        
-        if (canvasElement) {
-            canvasElement.classList.remove('hidden');
-        }
-    };
-    Module.printErr = function(text) {
-        console.error(text);
-        var statusElement = document.getElementById('status');
-        if (statusElement) statusElement.textContent = 'Error: ' + text;
-    };
-    </script>
+   <script>
+var Module = {
+    onRuntimeInitialized: function() {
+        // This ensures all exports are available
+        console.log('Module initialized', Module);
+    }
+};
+</script>
 
     <!-- This MUST be present for Emscripten -->
     {{{ SCRIPT }}}
