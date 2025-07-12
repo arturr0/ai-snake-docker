@@ -8,6 +8,7 @@
 #include <SDL/SDL.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #endif
 
 using namespace std;
@@ -16,6 +17,7 @@ const int WIDTH = 20;
 const int HEIGHT = 20;
 const int CELL_SIZE = 20;
 const int AI_UPDATE_INTERVAL = 5;
+const int LOG_INTERVAL = 100; // Log every 100 episodes
 
 // Game state
 int ai_pion = HEIGHT / 2;
@@ -33,16 +35,139 @@ vector<vector<int>> v1;
 
 // Q-learning
 vector<vector<float>> q_table;
-float learning_rate = 0.3f;       // Higher learning rate for faster adaptation
-float discount_factor = 0.95f;    // High discount factor for long-term planning
-float exploration_rate = 0.5f;    // Start with high exploration
+float learning_rate = 0.3f;
+float discount_factor = 0.95f;
+float exploration_rate = 0.5f;
 int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 2000000; // More training episodes
-const float MIN_EXPLORATION = 0.01f; // Minimum exploration rate
+const int MAX_TRAINING_EPISODES = 20000;
+const float MIN_EXPLORATION = 0.01f;
+
+// Performance tracking
+vector<int> episode_scores;
+vector<float> avg_q_values;
+vector<int> episode_lengths;
 
 // SDL
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
+
+#ifdef __EMSCRIPTEN__
+EM_JS(void, initChartJS, (), {
+    // Create chart container
+    const chartContainer = document.createElement('div');
+    chartContainer.style.width = '800px';
+    chartContainer.style.margin = '0 auto';
+    chartContainer.style.backgroundColor = '#222';
+    chartContainer.style.padding = '20px';
+    chartContainer.style.borderRadius = '10px';
+    document.body.appendChild(chartContainer);
+
+    // Create canvas for score chart
+    const scoreCanvas = document.createElement('canvas');
+    scoreCanvas.id = 'scoreChart';
+    scoreCanvas.width = 800;
+    scoreCanvas.height = 400;
+    chartContainer.appendChild(scoreCanvas);
+
+    // Create canvas for Q-value chart
+    const qValueCanvas = document.createElement('canvas');
+    qValueCanvas.id = 'qValueChart';
+    qValueCanvas.width = 800;
+    qValueCanvas.height = 400;
+    chartContainer.appendChild(qValueCanvas);
+
+    // Initialize charts
+    window.scoreChart = new Chart(scoreCanvas, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Score',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    window.qValueChart = new Chart(qValueCanvas, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Average Q-value',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.1,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: false
+        }
+    });
+});
+
+EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
+    // Update score chart
+    window.scoreChart.data.labels.push(episode);
+    window.scoreChart.data.datasets[0].data.push(score);
+    window.scoreChart.update();
+
+    // Update Q-value chart
+    window.qValueChart.data.labels.push(episode);
+    window.qValueChart.data.datasets[0].data.push(avg_q);
+    window.qValueChart.update();
+
+    // Update status
+    document.getElementById('status').innerHTML = 
+        `Episode: ${episode} | Score: ${score} | Exploration: ${Module.getExplorationRate().toFixed(2)}`;
+});
+
+EM_JS(float, getExplorationRate, (), {
+    return Module.getExplorationRate();
+});
+#endif
+
+void logPerformance() {
+    if (training_episodes % LOG_INTERVAL == 0) {
+        // Calculate average Q-value
+        float total_q = 0;
+        int count = 0;
+        for (const auto& row : q_table) {
+            for (float val : row) {
+                total_q += val;
+                count++;
+            }
+        }
+        float avg_q = count > 0 ? total_q / count : 0;
+
+        episode_scores.push_back(ai_punkty);
+        avg_q_values.push_back(avg_q);
+        episode_lengths.push_back(ai_longer);
+
+        #ifdef __EMSCRIPTEN__
+        updateCharts(training_episodes, ai_punkty, avg_q);
+        #else
+        cout << "Episode: " << training_episodes 
+             << " | Score: " << ai_punkty 
+             << " | Avg Q: " << avg_q
+             << " | Exploration: " << exploration_rate << endl;
+        #endif
+
+        // Reset score for next episode
+        ai_punkty = 0;
+    }
+}
 
 void initSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -73,7 +198,6 @@ void initSDL() {
 }
 
 void draw() {
-    // Clear screen
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
@@ -90,7 +214,7 @@ void draw() {
     // Draw snake body
     SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
     for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2) { // Safety check
+        if (seg.size() == 2) {
             SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
             SDL_RenderFillRect(renderer, &body);
         }
@@ -101,13 +225,6 @@ void draw() {
     SDL_Rect head = {ai_poz * CELL_SIZE, ai_pion * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(renderer, &head);
 
-    // Display training info
-    SDL_Color textColor = {255, 255, 255, 255};
-    char infoText[100];
-    snprintf(infoText, sizeof(infoText), "Ep: %d Score: %d Exp: %.2f", 
-             training_episodes, ai_punkty, exploration_rate);
-    
-    // For native build you'd use SDL_TTF here, but for simplicity we'll skip it in this example
     SDL_RenderPresent(renderer);
 }
 
@@ -144,13 +261,11 @@ bool isAIBody(int x, int y) {
 }
 
 void initQTable() {
-    // State includes: position (x,y) and direction
-    q_table.resize(WIDTH * HEIGHT * 4); // 4 possible directions
+    q_table.resize(WIDTH * HEIGHT * 4);
     for (auto& row : q_table) {
         row.assign(4, 0.0f);
-        // Initialize with small random values to break symmetry
         for (float& val : row) {
-            val = (rand() % 100) / 1000.0f - 0.05f; // Small random values around zero
+            val = (rand() % 100) / 1000.0f - 0.05f;
         }
     }
 }
@@ -186,18 +301,16 @@ void updateQTable(int ox, int oy, int odir, int action, int nx, int ny, float re
 }
 
 float calculateReward(int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -200.0f; // Very strong penalty for crashing
-    if (got_food) return 100.0f; // Strong reward for getting food
+    if (crashed) return -200.0f;
+    if (got_food) return 100.0f;
     
-    // Penalize being near walls
     int min_wall_dist = min(min(x, HEIGHT-1-x), min(y, WIDTH-1-y));
-    if (min_wall_dist == 0) return -50.0f;  // Touching wall
-    if (min_wall_dist == 1) return -10.0f;  // One step from wall
+    if (min_wall_dist == 0) return -50.0f;
+    if (min_wall_dist == 1) return -10.0f;
     
-    // Reward based on distance to food (normalized)
     float dist = sqrtf((x-food_x)*(x-food_x) + (y-food_y)*(y-food_y));
     float max_dist = sqrtf(WIDTH*WIDTH + HEIGHT*HEIGHT);
-    return 5.0f * (1.0f - (dist / max_dist)); // Stronger distance-based reward
+    return 5.0f * (1.0f - (dist / max_dist));
 }
 
 void resetSnake() {
@@ -230,10 +343,10 @@ bool aiMove(int& dir) {
         
         int nx = ai_pion, ny = ai_poz;
         switch (action) {
-            case 0: --nx; break; // up
-            case 1: ++nx; break; // down
-            case 2: --ny; break; // left
-            case 3: ++ny; break; // right
+            case 0: --nx; break;
+            case 1: ++nx; break;
+            case 2: --ny; break;
+            case 3: ++ny; break;
         }
 
         bool valid = isValidPosition(nx, ny) && !isAIBody(nx, ny);
@@ -246,7 +359,6 @@ bool aiMove(int& dir) {
         if (valid) {
             dir = action;
         } else {
-            // Emergency avoidance - try to find any safe move
             vector<int> safe_actions;
             for (int i = 0; i < 4; i++) {
                 int tx = ai_pion, ty = ai_poz;
@@ -263,12 +375,11 @@ bool aiMove(int& dir) {
             if (!safe_actions.empty()) {
                 dir = safe_actions[rand() % safe_actions.size()];
             } else {
-                return true; // No safe moves available
+                return true;
             }
         }
     }
 
-    // Execute move
     switch (dir) {
         case 0: --ai_pion; break;
         case 1: ++ai_pion; break;
@@ -276,12 +387,10 @@ bool aiMove(int& dir) {
         case 3: ++ai_poz; break;
     }
 
-    // Check for collisions
     if (!isValidPosition(ai_pion, ai_poz) || isAIBody(ai_pion, ai_poz)) {
         return true;
     }
 
-    // Update positions
     ai_pozycjac.insert(ai_pozycjac.begin(), {ai_pion, ai_poz});
     if (ai_pozycjac.size() > ai_longer + 2) {
         ai_pozycjac.resize(ai_longer + 2);
@@ -292,7 +401,6 @@ bool aiMove(int& dir) {
         ai_pozycja.resize(ai_longer + 1);
     }
 
-    // Check for food
     if (ai_pion == food_x && ai_poz == food_y) {
         ++ai_punkty;
         v1 = generuj();
@@ -325,8 +433,8 @@ void main_loop() {
 
     if (training_episodes < MAX_TRAINING_EPISODES) {
         ++training_episodes;
-        // Slow exponential decay of exploration rate
         exploration_rate = max(MIN_EXPLORATION, exploration_rate * 0.9999f);
+        logPerformance();
     }
 
     if (crashed) {
@@ -334,10 +442,16 @@ void main_loop() {
     }
 }
 
+extern "C" {
+    EMSCRIPTEN_KEEPALIVE
+    float getExplorationRate() {
+        return exploration_rate;
+    }
+}
+
 int main() {
     srand((unsigned)time(nullptr));
 
-    // Initialize
     v1 = generuj();
     ai_pozycja = {{HEIGHT/2, WIDTH/2}};
     ai_pozycjac = {{HEIGHT/2, WIDTH/2}};
@@ -351,9 +465,10 @@ int main() {
     initQTable();
     initSDL();
 
-#ifdef __EMSCRIPTEN__
+    #ifdef __EMSCRIPTEN__
+    initChartJS();
     emscripten_set_main_loop(main_loop, 0, 1);
-#else
+    #else
     static int ai_dir = rand() % 4;
     static int reset_timer = 0;
     
@@ -375,6 +490,7 @@ int main() {
         if (training_episodes < MAX_TRAINING_EPISODES) {
             ++training_episodes;
             exploration_rate = max(MIN_EXPLORATION, exploration_rate * 0.9999f);
+            logPerformance();
         }
 
         if (crashed) {
@@ -388,7 +504,7 @@ int main() {
             }
         }
     }
-#endif
+    #endif
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
