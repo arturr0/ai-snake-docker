@@ -9,9 +9,15 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+// #include <SDL2/SDL.h>
+// #else
+// #include <windows.h>
+// #endif
+
+#ifdef __EMSCRIPTEN__
 #include <SDL2/SDL.h>
 #else
-#include <windows.h>
+#include <SDL.h>
 #endif
 
 using namespace std;
