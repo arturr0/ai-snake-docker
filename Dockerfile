@@ -15,14 +15,16 @@ RUN mkdir -p build && \
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
 
-# Create directory for MIME types and add WASM support
-RUN mkdir -p /etc/nginx/conf.d && \
-    echo "types { application/wasm wasm; }" > /etc/nginx/conf.d/wasm.conf && \
-    echo "include /etc/nginx/conf.d/wasm.conf;" >> /etc/nginx/nginx.conf
+# Create custom mime.types file with WASM support
+RUN echo "types {" > /etc/nginx/mime.types && \
+    echo "    application/wasm wasm;" >> /etc/nginx/mime.types && \
+    echo "    text/html html;" >> /etc/nginx/mime.types && \
+    echo "    application/javascript js;" >> /etc/nginx/mime.types && \
+    echo "}" >> /etc/nginx/mime.types
 
 # Copy all necessary files
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
-COPY --from=builder /app/shell.html /usr/share/nginx/html/index.html
+COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/index.html
 
 EXPOSE 80
