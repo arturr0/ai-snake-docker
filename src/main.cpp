@@ -37,7 +37,7 @@ float learning_rate = 0.3f;       // Higher learning rate for faster adaptation
 float discount_factor = 0.95f;    // High discount factor for long-term planning
 float exploration_rate = 0.5f;    // Start with high exploration
 int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 20000; // More training episodes
+const int MAX_TRAINING_EPISODES = 2000000; // More training episodes
 const float MIN_EXPLORATION = 0.01f; // Minimum exploration rate
 
 // SDL
