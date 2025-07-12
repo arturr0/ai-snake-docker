@@ -454,9 +454,13 @@ void cleanup() {
     SDL_Quit();
 }
 
-// Main function
 int main() {
     srand((unsigned)time(nullptr));
+
+    #ifdef __EMSCRIPTEN__
+    export_functions();
+    initChartJS();
+    #endif
 
     // Initialize game state
     auto all_positions = generateAllPositions();
@@ -475,7 +479,6 @@ int main() {
     initSDL();
 
     #ifdef __EMSCRIPTEN__
-    initChartJS();
     emscripten_set_main_loop(mainLoop, 0, 1);
     #else
     int direction = rand() % 4;
@@ -519,3 +522,4 @@ int main() {
     cleanup();
     return 0;
 }
+
