@@ -5,12 +5,22 @@
     <title>AI Snake Game</title>
     <style>
         body { margin: 0; padding: 0; background: #111; }
-        canvas { display: block; margin: 0 auto; }
+        canvas { display: block; margin: 0 auto; background: black; }
         #status { color: white; text-align: center; font-family: sans-serif; }
     </style>
 </head>
 <body>
     <div id="status">Loading AI Snake...</div>
+    <canvas id="canvas" width="400" height="460"></canvas>
+    <script>
+        var Module = {
+            canvas: (function() {
+                var canvas = document.getElementById('canvas');
+                canvas.getContext('webgl', { antialias: false });
+                return canvas;
+            })()
+        };
+    </script>
     {{{ SCRIPT }}}
 </body>
 </html>
