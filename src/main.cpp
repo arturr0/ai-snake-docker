@@ -156,7 +156,7 @@ int getStateIndex(int x, int y, int dir) {
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    if ((float)rand() / RAND_MAX < exploration_rate && training_episodes < MAX_TRAINING_EPISODES) {
+if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate && training_episodes < MAX_TRAINING_EPISODES) {
         return rand() % 4;
     } else {
         int state = getStateIndex(x, y, current_dir);
