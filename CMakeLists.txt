@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
-    # Compile options - keep these as separate items
+    # Compile options
     add_compile_options(
         -O3
         -sUSE_SDL=2
@@ -16,15 +16,16 @@ if(EMSCRIPTEN)
         -sENVIRONMENT=web
     )
     
-    # Linker flags - properly formatted lists for exported functions
+    # Linker flags
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL_IMAGE=2")
+    # Only export _main since we don't have _start_game
     set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main','_start_game']")
+        "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']")
     set(CMAKE_EXE_LINKER_FLAGS 
