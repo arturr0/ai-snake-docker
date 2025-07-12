@@ -7,54 +7,62 @@
         body {
             margin: 0;
             padding: 20px;
-            background-color: #222;
-            color: #eee;
+            background: #222;
+            color: white;
             font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
         }
         canvas {
             background: #000;
-            margin-bottom: 10px;
+            margin: 10px 0;
+            border: 2px solid #444;
         }
-        #output {
-            margin-top: 20px;
-            font-family: monospace;
-            white-space: pre;
+        #status {
+            margin: 10px 0;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
-    <h1>AI Snake Game</h1>
-    <canvas id="canvas"></canvas>
-    <div id="output"></div>
+    <div id="game-container">
+        <h1>AI Snake Game</h1>
+        <div id="status">Initializing game...</div>
+        <canvas id="canvas"></canvas>
+    </div>
+
     <script>
-        var Module = {
-            canvas: (function() {
-                var canvas = document.getElementById('canvas');
-                canvas.width = window.innerWidth * 0.8;
-                canvas.height = window.innerHeight * 0.7;
+        const Module = {
+            canvas: (() => {
+                const canvas = document.getElementById('canvas');
+                canvas.width = 400;  // WIDTH * CELL_SIZE
+                canvas.height = 400; // HEIGHT * CELL_SIZE
                 return canvas;
             })(),
-            print: function(text) {
-                if (arguments.length > 1) 
-                    text = Array.prototype.slice.call(arguments).join(' ');
+            print: (text) => {
                 console.log(text);
-                var output = document.getElementById('output');
-                output.textContent += text + '\n';
-                output.scrollTop = output.scrollHeight;
+                const status = document.getElementById('status');
+                status.textContent += text + '\n';
+                status.scrollTop = status.scrollHeight;
             },
-            printErr: function(text) {
-                if (arguments.length > 1) 
-                    text = Array.prototype.slice.call(arguments).join(' ');
+            printErr: (text) => {
                 console.error(text);
-                var output = document.getElementById('output');
-                output.textContent += text + '\n';
-                output.scrollTop = output.scrollHeight;
+                const status = document.getElementById('status');
+                status.textContent += '[ERROR] ' + text + '\n';
+                status.scrollTop = status.scrollHeight;
+            },
+            onRuntimeInitialized: () => {
+                document.getElementById('status').textContent = 'Game running!\n';
+                Module._main();
             }
         };
     </script>
-    {{{ SCRIPT }}}
+    <script src="aisnake_web.js"></script>
 </body>
 </html>
