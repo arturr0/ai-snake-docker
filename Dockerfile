@@ -15,9 +15,15 @@ RUN mkdir -p build && \
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
 
-COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/
+# Add proper MIME types for WASM
+RUN echo "types { application/wasm wasm; }" > /etc/nginx/mime.types.d/wasm.conf
+
+# Copy all necessary files
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
 COPY --from=builder /app/shell.html /usr/share/nginx/html/index.html
+
+# Nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
