@@ -42,11 +42,21 @@ endif()
 add_executable(aisnake_web src/main.cpp)
 
 if(EMSCRIPTEN)
-    # For Emscripten, the SDL2 linkage is handled via the compiler flags
-    target_link_libraries(aisnake_web PRIVATE 
-        "-sUSE_SDL=2"
-        "-sUSE_SDL_IMAGE=2"
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+    
+    add_compile_options(
+        -O3
+        -sUSE_SDL=2
+        -sALLOW_MEMORY_GROWTH=1
+        -sMAXIMUM_MEMORY=256MB
+        -sINITIAL_MEMORY=64MB
+        -sNO_EXIT_RUNTIME=1
+        -sENVIRONMENT=web
+        -sASSERTIONS=1
     )
-else()
-    target_link_libraries(aisnake_web ${SDL2_LIBRARIES})
+    
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main','_emscripten_set_main_loop','_emscripten_cancel_main_loop']")
 endif()
