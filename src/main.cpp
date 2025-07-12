@@ -89,16 +89,31 @@ EM_JS(void, initChartJS, (), {
 });
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
-    // Safe element access with null checks
-    var statusElement = document.getElementById('status');
-    if (statusElement) {
-        try {
-            var explorationRate = Module.getExplorationRate();
-            statusElement.innerHTML = 
-                `Episode: ${episode} | Score: ${score} | Exploration: ${explorationRate.toFixed(2)}`;
-        } catch(e) {
-            console.error('Error updating status:', e);
+    try {
+        var statusElement = document.getElementById('status');
+        if (statusElement) {
+            // Get the function pointer first
+            var getExplorationRate = Module.cwrap(
+                'getExplorationRate',
+                'number',
+                []
+            );
+            
+            if (getExplorationRate) {
+                var rate = getExplorationRate();
+                statusElement.innerHTML = 
+                    `Episode: ${episode} | Score: ${score} | Exploration: ${rate.toFixed(2)}`;
+            } else {
+                statusElement.innerHTML = 
+                    `Episode: ${episode} | Score: ${score}`;
+            }
         }
+    } catch(e) {
+        console.error('Chart update error:', e);
+    }
+    
+    // Rest of your chart update code...
+});
     }
     
     if (window.scoreChart && window.qValueChart) {
@@ -420,12 +435,16 @@ void main_loop() {
     }
 }
 
+
+
+// Add this in the global scope
 extern "C" {
     EMSCRIPTEN_KEEPALIVE
     float getExplorationRate() {
         return exploration_rate;
     }
 }
+#endif
 
 int main() {
     srand((unsigned)time(nullptr));
