@@ -6,19 +6,20 @@ set(CMAKE_CXX_STANDARD 17)
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
-    # SDL2 linking flags
-    set(SDL2_LIBRARIES "-sUSE_SDL=2 -sUSE_SDL_IMAGE=2")
-    
+    # These must be separate options, not a string
     add_compile_options(
         -O3
-        ${SDL2_LIBRARIES}
+        -sUSE_SDL=2
+        -sUSE_SDL_IMAGE=2
         -sALLOW_MEMORY_GROWTH=1
         -sNO_EXIT_RUNTIME=1
         -sENVIRONMENT=web
     )
     
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} ${SDL2_LIBRARIES} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
+    # Linker options must also be separate
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL_IMAGE=2")
 else()
     find_package(SDL2 REQUIRED)
     add_compile_options(-O3)
