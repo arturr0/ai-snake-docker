@@ -4,13 +4,57 @@
     <meta charset="utf-8">
     <title>AI Snake Game</title>
     <style>
-        body { margin: 0; padding: 0; background: #111; }
-        canvas { display: block; margin: 0 auto; }
-        #status { color: white; text-align: center; font-family: sans-serif; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #222;
+            color: #eee;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            background: #000;
+            margin-bottom: 10px;
+        }
+        #output {
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre;
+        }
     </style>
 </head>
 <body>
-    <div id="status">Loading AI Snake...</div>
+    <h1>AI Snake Game</h1>
+    <canvas id="canvas"></canvas>
+    <div id="output"></div>
+    <script>
+        var Module = {
+            canvas: (function() {
+                var canvas = document.getElementById('canvas');
+                canvas.width = window.innerWidth * 0.8;
+                canvas.height = window.innerHeight * 0.7;
+                return canvas;
+            })(),
+            print: function(text) {
+                if (arguments.length > 1) 
+                    text = Array.prototype.slice.call(arguments).join(' ');
+                console.log(text);
+                var output = document.getElementById('output');
+                output.textContent += text + '\n';
+                output.scrollTop = output.scrollHeight;
+            },
+            printErr: function(text) {
+                if (arguments.length > 1) 
+                    text = Array.prototype.slice.call(arguments).join(' ');
+                console.error(text);
+                var output = document.getElementById('output');
+                output.textContent += text + '\n';
+                output.scrollTop = output.scrollHeight;
+            }
+        };
+    </script>
     {{{ SCRIPT }}}
 </body>
 </html>
