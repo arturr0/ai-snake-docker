@@ -1,3 +1,7 @@
+// =========================  AI‑Snake  =========================
+// A minimal Q‑learning snake that compiles both natively and
+// with Emscripten (-sUSE_SDL=2).
+// --------------------------------------------------------------
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -5,417 +9,225 @@
 #include <algorithm>
 #include <queue>
 #include <cmath>
-#include <SDL/SDL.h>
+#include <SDL.h>               // <SDL.h> works on desktop & Web
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>
+ #include <emscripten.h>
 #endif
 
 using namespace std;
 
-const int WIDTH = 20;
-const int HEIGHT = 20;
-const int CELL_SIZE = 20;
-const int AI_UPDATE_INTERVAL = 5;
+// --------------------------------------------------------------
+// Board‑level constants
+// --------------------------------------------------------------
+const int WIDTH  = 20;          // columns
+const int HEIGHT = 20;          // rows
+const int CELL   = 20;          // pixel size of each grid cell
+const int AI_UPDATE_INTERVAL = 5;   // RL update cadence (frames)
 
+// --------------------------------------------------------------
+// RL parameters
+// --------------------------------------------------------------
+float ALPHA   = 0.10f;          // learning‑rate
+float GAMMA   = 0.90f;          // discount
+float EPS     = 0.30f;          // ε‑greedy (decays)
+const int MAX_EP = 1000;        // training episodes for decay
+
+// --------------------------------------------------------------
 // Game state
-int ai_pion = HEIGHT / 2;
-int ai_poz = WIDTH / 2;
-int ai_punkty = 0;
-int ai_longer = 2;
-int food_x = 0, food_y = 0;
-bool ai_kolizja = false;
-int czas = 200;
+// --------------------------------------------------------------
+int  headR, headC;              // head row/col
+int  foodR, foodC;              // food row/col
+int  length = 2;                // body length (incl. head)
+int  score  = 0;                // food eaten
 
-// AI snake data with bounds checking
-vector<vector<int>> ai_pozycja;
-vector<vector<int>> ai_pozycjac;
-vector<vector<int>> v1;
+vector<vector<int>> body;       // 0 = head, rest tail
+vector<vector<int>> allCells;   // cached list of every {r,c}
 
-// Q-learning with safe initialization
-vector<vector<float>> q_table;
-float learning_rate = 0.1f;
-float discount_factor = 0.9f;
-float exploration_rate = 0.3f;
-int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 1000;
+// --------------------------------------------------------------
+// Q‑table:  state = (row, col, prev‑dir)  => 4 action‑values
+// --------------------------------------------------------------
+vector<vector<float>> Q;        // size HEIGHT*WIDTH*4 × 4
 
+inline int stateIdx(int r,int c,int d){ return (r*WIDTH + c)*4 + d; }
+
+// --------------------------------------------------------------
+// Helpers
+// --------------------------------------------------------------
+inline bool valid(int r,int c){ return r>=0 && r<HEIGHT && c>=0 && c<WIDTH; }
+
+bool inBody(int r,int c){
+    for(auto &s:body) if(s[0]==r && s[1]==c) return true;
+    return false;
+}
+
+vector<vector<int>> freeCells(){
+    vector<vector<int>> f=allCells;
+    for(auto &s:body)   f.erase(remove(f.begin(),f.end(),s),f.end());
+    return f;
+}
+
+float dist(int r,int c){ return hypotf(float(r-foodR), float(c-foodC)); }
+
+// --------------------------------------------------------------
+// Q‑learning helpers
+// --------------------------------------------------------------
+int chooseAction(int r,int c,int dir)
+{
+    // ε‑greedy with random tie‑break
+    if( (float)rand()/static_cast<float>(RAND_MAX) < EPS ) return rand()%4;
+
+    const auto &q = Q[stateIdx(r,c,dir)];
+    float best = *max_element(q.begin(),q.end());
+    int bestA[4], n=0;
+    for(int a=0;a<4;++a) if(fabs(q[a]-best)<1e-6f) bestA[n++]=a;
+    return bestA[rand()%n];
+}
+
+void updateQ(int r,int c,int dir,int a,int nr,int nc,float reward)
+{
+    int s  = stateIdx(r,c,dir);
+    int ns = stateIdx(nr,nc,a);
+    float bestNext = *max_element(Q[ns].begin(), Q[ns].end());
+    Q[s][a] = (1-ALPHA)*Q[s][a] + ALPHA*(reward + GAMMA*bestNext);
+}
+
+float rewardFn(bool gotFood,bool crash,float oldD,float newD)
+{
+    if(crash)      return -50.f;
+    if(gotFood)    return 100.f;
+    if(newD < oldD) return  1.f;   // moved closer
+    if(newD > oldD) return -1.f;   // moved farther
+    return 0.f;
+}
+
+// --------------------------------------------------------------
 // SDL handles
-SDL_Window* window = nullptr;
-SDL_Renderer* renderer = nullptr;
+// --------------------------------------------------------------
+SDL_Window  *win  = nullptr;
+SDL_Renderer* ren = nullptr;
 
-void initSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        cerr << "SDL_Init Error: " << SDL_GetError() << '\n';
-        exit(1);
-    }
-
-    window = SDL_CreateWindow("AI Snake",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        WIDTH * CELL_SIZE,
-        HEIGHT * CELL_SIZE,
-        SDL_WINDOW_SHOWN);
-    if (!window) {
-        cerr << "SDL_CreateWindow Error: " << SDL_GetError() << '\n';
-        SDL_Quit();
-        exit(1);
-    }
-
-    renderer = SDL_CreateRenderer(window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << '\n';
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        exit(1);
-    }
+void sdlInit()
+{
+    if(SDL_Init(SDL_INIT_VIDEO)) { cerr<<"SDL_Init: "<<SDL_GetError()<<"\n"; exit(1);}    
+    win = SDL_CreateWindow("AI‑Snake", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                           WIDTH*CELL, HEIGHT*CELL, SDL_WINDOW_SHOWN);
+    if(!win){ cerr<<"CreateWindow: "<<SDL_GetError()<<"\n"; exit(1);}    
+    ren = SDL_CreateRenderer(win,-1, SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
+    if(!ren){ cerr<<"CreateRenderer: "<<SDL_GetError()<<"\n"; exit(1);}    
 }
 
-void draw() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-
-    // Draw border
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-    SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
-    SDL_RenderDrawRect(renderer, &border);
-
-    // Draw food (with bounds check)
-    if (food_x >= 0 && food_x < HEIGHT && food_y >= 0 && food_y < WIDTH) {
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_Rect food = {food_y * CELL_SIZE, food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-        SDL_RenderFillRect(renderer, &food);
+void draw()
+{
+    SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderClear(ren);
+    // border
+    SDL_SetRenderDrawColor(ren,40,40,40,255);
+    SDL_Rect b{0,0, WIDTH*CELL, HEIGHT*CELL}; SDL_RenderDrawRect(ren,&b);
+    // food
+    SDL_SetRenderDrawColor(ren,255,0,0,255);
+    SDL_Rect f{foodC*CELL, foodR*CELL, CELL, CELL}; SDL_RenderFillRect(ren,&f);
+    // head
+    SDL_SetRenderDrawColor(ren,0,255,0,255);
+    SDL_Rect h{headC*CELL, headR*CELL, CELL, CELL}; SDL_RenderFillRect(ren,&h);
+    // tail
+    SDL_SetRenderDrawColor(ren,0,180,0,255);
+    for(int i=1;i<length && i<(int)body.size();++i){
+        SDL_Rect s{ body[i][1]*CELL, body[i][0]*CELL, CELL, CELL};
+        SDL_RenderFillRect(ren,&s);
     }
-
-    // Draw snake body with bounds checking
-    SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
-    for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && seg[0] >= 0 && seg[0] < HEIGHT && seg[1] >= 0 && seg[1] < WIDTH) {
-            SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-            SDL_RenderFillRect(renderer, &body);
-        }
-    }
-
-    // Draw snake head with bounds checking
-    if (ai_pion >= 0 && ai_pion < HEIGHT && ai_poz >= 0 && ai_poz < WIDTH) {
-        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-        SDL_Rect head = {ai_poz * CELL_SIZE, ai_pion * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-        SDL_RenderFillRect(renderer, &head);
-    }
-
-    SDL_RenderPresent(renderer);
+    SDL_RenderPresent(ren);
 }
 
-vector<vector<int>> generuj() {
-    vector<vector<int>> new_v1(WIDTH * HEIGHT, vector<int>(2, 0));
-    int idx = 0;
-    for (int i = 0; i < HEIGHT; ++i) {
-        for (int j = 0; j < WIDTH; ++j, ++idx) {
-            if (idx < new_v1.size()) {
-                new_v1[idx][0] = i;
-                new_v1[idx][1] = j;
-            }
-        }
-    }
-    return new_v1;
+// --------------------------------------------------------------
+// Game reset
+// --------------------------------------------------------------
+void resetGame()
+{
+    length=2; score=0; headR=HEIGHT/2; headC=WIDTH/2;
+    body.clear(); body.push_back({headR,headC});
+
+    // random food
+    auto freeT = freeCells();
+    auto pick  = freeT[rand()%freeT.size()];
+    foodR=pick[0]; foodC=pick[1];
 }
 
-vector<vector<int>> wolne(const vector<vector<int>>& snake, vector<vector<int>> all) {
-    vector<vector<int>> result = all;
-    for (const auto& seg : snake) {
-        result.erase(remove(result.begin(), result.end(), seg), result.end());
+// --------------------------------------------------------------
+// Main AI step – returns true on crash
+// --------------------------------------------------------------
+bool step(int &dir)
+{
+    // choose / update every n frames (simple throttle)
+    static int frame=0; ++frame;
+    if(frame%AI_UPDATE_INTERVAL==0 || EPS>0.1f){
+        int act = chooseAction(headR,headC,dir);
+        dir = act;
     }
-    return result;
-}
 
-bool ai_urobos() {
-    for (size_t i = 1; i < ai_pozycja.size(); ++i) {
-        if (i < ai_pozycja.size() && 
-            ai_pion == ai_pozycja[i][0] && 
-            ai_poz == ai_pozycja[i][1]) {
-            return true;
-        }
+    int nr=headR, nc=headC;
+    if(dir==0) --nr; else if(dir==1) ++nr; else if(dir==2) --nc; else if(dir==3) ++nc;
+
+    bool crash = !valid(nr,nc) || inBody(nr,nc);
+    bool gotFood = (nr==foodR && nc==foodC);
+
+    float oldD = dist(headR,headC), newD = dist(nr,nc);
+    float r = rewardFn(gotFood,crash,oldD,newD);
+    updateQ(headR,headC,dir,dir,nr,nc,r);
+
+    if(crash) return true;
+
+    headR=nr; headC=nc;
+    body.insert(body.begin(),{headR,headC});
+    if((int)body.size()>length) body.pop_back();
+
+    if(gotFood){
+        ++score; ++length;
+        auto freeT = freeCells();
+        auto pick  = freeT[rand()%freeT.size()];
+        foodR=pick[0]; foodC=pick[1];
     }
     return false;
 }
 
-bool isValidPosition(int x, int y) {
-    return x >= 0 && x < HEIGHT && y >= 0 && y < WIDTH;
-}
+// --------------------------------------------------------------
+// Global variables for loop
+// --------------------------------------------------------------
+int DIR = rand()%4;    // 0 up,1 down,2 left,3 right
+int wait=0;            // frames to wait after crash
+int episode=0;
 
-bool isAIBody(int x, int y) {
-    for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && seg[0] == x && seg[1] == y) {
-            return true;
-        }
-    }
-    return false;
-}
+void loop()
+{
+    if(wait){ if(--wait==0) resetGame(); return; }
 
-void initQTable() {
-    q_table.resize(WIDTH * HEIGHT * 4);
-    for (auto& row : q_table) {
-        row.assign(4, 0.0f);
-    }
-}
-
-int getStateIndex(int x, int y, int dir) {
-    if (x < 0 || x >= HEIGHT || y < 0 || y >= WIDTH || dir < 0 || dir >= 4) {
-        return 0; // Return safe default index
-    }
-    return (y * WIDTH + x) * 4 + dir;
-}
-
-int chooseAction(int x, int y, int current_dir) {
-    if ((float)rand() / RAND_MAX < exploration_rate &&
-        training_episodes < MAX_TRAINING_EPISODES) {
-        return rand() % 4;
-    }
-
-    int state = getStateIndex(x, y, current_dir);
-    if (state >= 0 && state < q_table.size()) {
-        return (int)distance(q_table[state].begin(),
-            max_element(q_table[state].begin(), q_table[state].end()));
-    }
-    return rand() % 4; // Fallback to random action
-}
-
-void updateQTable(int ox, int oy, int odir, int action, int nx, int ny, float reward) {
-    int old_state = getStateIndex(ox, oy, odir);
-    int new_state = getStateIndex(nx, ny, action);
-
-    if (old_state >= 0 && old_state < q_table.size() && 
-        new_state >= 0 && new_state < q_table.size()) {
-        float best_future = *max_element(q_table[new_state].begin(), q_table[new_state].end());
-        q_table[old_state][action] = (1 - learning_rate) * q_table[old_state][action] +
-            learning_rate * (reward + discount_factor * best_future);
-    }
-}
-
-float calculateReward(int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -50.0f;
-    if (got_food) return 100.0f;
-    
-    if (!isValidPosition(x, y) || !isValidPosition(ai_pion, ai_poz)) {
-        return 0.0f;
-    }
-    
-    float prev_dist = sqrtf((ai_pion-food_x)*(ai_pion-food_x) + 
-                         (ai_poz-food_y)*(ai_poz-food_y));
-    float new_dist = sqrtf((x-food_x)*(x-food_x) + 
-                        (y-food_y)*(y-food_y));
-    
-    if (new_dist < prev_dist) return 1.0f;
-    if (new_dist > prev_dist) return -1.0f;
-    return 0.0f;
-}
-
-void resetSnake() {
-    ai_pion = HEIGHT / 2;
-    ai_poz = WIDTH / 2;
-    ai_longer = 2;
-    ai_pozycja = {{ai_pion, ai_poz}};
-    ai_pozycjac = {{ai_pion, ai_poz}};
-    ai_kolizja = false;
-    
-    v1 = generuj();
-    auto freeTiles = wolne(ai_pozycjac, v1);
-    if (!freeTiles.empty()) {
-        int k = rand() % freeTiles.size();
-        if (k < freeTiles.size()) {
-            food_x = freeTiles[k][0];
-            food_y = freeTiles[k][1];
-        }
-    }
-}
-
-bool aiMove(int& dir) {
-    static int frame = 0;
-    ++frame;
-
-    int prev_x = ai_pion;
-    int prev_y = ai_poz;
-    int prev_dir = dir;
-
-    if (frame % AI_UPDATE_INTERVAL == 0 || training_episodes < MAX_TRAINING_EPISODES) {
-        int action = chooseAction(ai_pion, ai_poz, dir);
-        
-        int nx = ai_pion, ny = ai_poz;
-        switch (action) {
-            case 0: --nx; break;
-            case 1: ++nx; break;
-            case 2: --ny; break;
-            case 3: ++ny; break;
-        }
-
-        bool valid = isValidPosition(nx, ny) && !isAIBody(nx, ny);
-        bool gotFood = (nx == food_x && ny == food_y);
-        bool crash = !valid;
-
-        float reward = calculateReward(nx, ny, gotFood, crash);
-        if (training_episodes < MAX_TRAINING_EPISODES) {
-            updateQTable(prev_x, prev_y, prev_dir, action, nx, ny, reward);
-        }
-
-        if (valid) {
-            dir = action;
-        } else {
-            vector<int> safe_actions;
-            for (int i = 0; i < 4; i++) {
-                int tx = ai_pion, ty = ai_poz;
-                switch (i) {
-                    case 0: --tx; break;
-                    case 1: ++tx; break;
-                    case 2: --ty; break;
-                    case 3: ++ty; break;
-                }
-                if (isValidPosition(tx, ty) {
-                    safe_actions.push_back(i);
-                }
-            }
-            if (!safe_actions.empty()) {
-                dir = safe_actions[rand() % safe_actions.size()];
-            }
-        }
-    }
-
-    switch (dir) {
-        case 0: --ai_pion; break;
-        case 1: ++ai_pion; break;
-        case 2: --ai_poz; break;
-        case 3: ++ai_poz; break;
-    }
-
-    if (!isValidPosition(ai_pion, ai_poz) {
-        return true;
-    }
-
-    // Check for self-collision
-    for (const auto& seg : ai_pozycja) {
-        if (seg.size() == 2 && ai_pion == seg[0] && ai_poz == seg[1]) {
-            return true;
-        }
-    }
-
-    // Update positions
-    if (ai_pozycjac.size() < 100) { // Prevent excessive growth
-        ai_pozycjac.insert(ai_pozycjac.begin(), {ai_pion, ai_poz});
-    }
-    if (ai_pozycja.size() < 100) {
-        ai_pozycja.insert(ai_pozycja.begin(), {ai_pion, ai_poz});
-    }
-
-    if (ai_pozycjac.size() > ai_longer + 2) {
-        ai_pozycjac.resize(ai_longer + 2);
-    }
-    if (ai_pozycja.size() > ai_longer + 1) {
-        ai_pozycja.resize(ai_longer + 1);
-    }
-
-    // Check for food
-    if (ai_pion == food_x && ai_poz == food_y) {
-        ++ai_punkty;
-        v1 = generuj();
-        auto freeTiles = wolne(ai_pozycjac, v1);
-        if (!freeTiles.empty()) {
-            int k = rand() % freeTiles.size();
-            if (k < freeTiles.size()) {
-                food_x = freeTiles[k][0];
-                food_y = freeTiles[k][1];
-                ++ai_longer;
-            }
-        }
-    }
-
-    return false;
-}
-
-void main_loop() {
-    static int ai_dir = rand() % 4;
-    static int reset_timer = 0;
-
-    if (reset_timer > 0) {
-        reset_timer--;
-        if (reset_timer == 0) {
-            resetSnake();
-        }
-        return;
-    }
-
-    bool crashed = aiMove(ai_dir);
+    bool crash = step(DIR);
     draw();
 
-    if (training_episodes < MAX_TRAINING_EPISODES) {
-        ++training_episodes;
-        exploration_rate = max(0.05f, exploration_rate - 0.0005f);
-    }
-
-    if (crashed) {
-        reset_timer = 5;
-    }
+    if(episode<MAX_EP){ ++episode; EPS = max(0.05f, EPS-0.0005f);}    
+    if(crash) wait=10;
 }
 
-int main() {
+// --------------------------------------------------------------
+// Main
+// --------------------------------------------------------------
+int main()
+{
     srand((unsigned)time(nullptr));
 
-    // Initialize vectors with proper bounds
-    v1 = generuj();
-    ai_pozycja = {{HEIGHT/2, WIDTH/2}};
-    ai_pozycjac = {{HEIGHT/2, WIDTH/2}};
-    
-    auto freeTiles = wolne(ai_pozycjac, v1);
-    if (!freeTiles.empty()) {
-        int k = rand() % freeTiles.size();
-        if (k < freeTiles.size()) {
-            food_x = freeTiles[k][0];
-            food_y = freeTiles[k][1];
-        }
-    }
+    // build cell cache & Q‑table
+    allCells.resize(WIDTH*HEIGHT);
+    int k=0; for(int r=0;r<HEIGHT;++r) for(int c=0;c<WIDTH;++c) allCells[k++]={r,c};
+    Q.assign(WIDTH*HEIGHT*4, vector<float>(4,0.f));
 
-    initQTable();
-    initSDL();
+    sdlInit(); resetGame();
 
 #ifdef __EMSCRIPTEN__
-    emscripten_set_main_loop(main_loop, 0, 1);
+    emscripten_set_main_loop(loop, 0, 1);
 #else
-    static int ai_dir = rand() % 4;
-    static int reset_timer = 0;
-    
-    bool running = true;
-    while (running) {
-        if (reset_timer > 0) {
-            reset_timer--;
-            if (reset_timer == 0) {
-                resetSnake();
-            }
-            SDL_Delay(czas);
-            continue;
-        }
-
-        bool crashed = aiMove(ai_dir);
-        draw();
-        SDL_Delay(czas);
-
-        if (training_episodes < MAX_TRAINING_EPISODES) {
-            ++training_episodes;
-            exploration_rate = max(0.05f, exploration_rate - 0.0005f);
-        }
-
-        if (crashed) {
-            reset_timer = 5;
-        }
-
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
-            }
-        }
-    }
+    bool run=true; SDL_Event e;
+    while(run){
+        while(SDL_PollEvent(&e)) if(e.type==SDL_QUIT) run=false;
+        loop(); SDL_Delay(120); }
+    SDL_DestroyRenderer(ren); SDL_DestroyWindow(win); SDL_Quit();
 #endif
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
     return 0;
 }
