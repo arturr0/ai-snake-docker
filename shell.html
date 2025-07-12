@@ -27,6 +27,16 @@
         #status {
             margin: 10px 0;
             white-space: pre-wrap;
+            max-height: 100px;
+            overflow-y: auto;
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            width: 400px;
+            text-align: center;
+        }
+        h1 {
+            color: #4CAF50;
         }
     </style>
 </head>
@@ -59,7 +69,7 @@
             },
             onRuntimeInitialized: () => {
                 document.getElementById('status').textContent = 'Game running!\n';
-                Module._main();
+                Module._start_game();
             }
         };
     </script>
