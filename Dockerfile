@@ -14,7 +14,8 @@ RUN mkdir -p build && \
     cd build && \
     emcmake cmake .. -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
+        -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
+        -DCMAKE_CXX_FLAGS="-sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sFULL_ES3=1" && \
     cmake --build . --verbose
 
 # Stage 2: Serve with Nginx
