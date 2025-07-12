@@ -4,12 +4,12 @@ FROM emscripten/emsdk:3.1.45 as builder
 WORKDIR /app
 COPY . .
 
-# Install basic build tools
+# Install dependencies
 RUN apt-get update && \
     apt-get install -y cmake ninja-build && \
     rm -rf /var/lib/apt/lists/*
 
-# Build with verbose output
+# Build
 RUN mkdir -p build && \
     cd build && \
     emcmake cmake .. -G Ninja \
