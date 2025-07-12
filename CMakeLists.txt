@@ -6,26 +6,22 @@ set(CMAKE_CXX_STANDARD 17)
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
-    # Compiler flags
-    add_compile_options(
-        -O3
-        -sUSE_SDL=2
-        -sUSE_WEBGL2=1
-        -sFULL_ES3=1
-        -sALLOW_MEMORY_GROWTH=1
-        -sMAXIMUM_MEMORY=256MB
-        -sNO_EXIT_RUNTIME=1
-        -sASSERTIONS=1
-    )
-    
-    # Linker flags
+    # These flags must be set as linker flags, not compile options
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} -sUSE_WEBGL2=1")
+    set(CMAKE_EXE_LINKER_FLAGS 
+        "${CMAKE_EXE_LINKER_FLAGS} -sALLOW_MEMORY_GROWTH=1")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
+    
+    # Compiler flags
+    add_compile_options(-O3)
 else()
     find_package(SDL2 REQUIRED)
     add_compile_options(-O3)
