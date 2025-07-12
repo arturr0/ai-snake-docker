@@ -8,7 +8,6 @@
 #include <SDL/SDL.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-#endif
 #include <emscripten/html5.h>
 #endif
 
@@ -171,40 +170,36 @@ void logPerformance() {
 }
 
 void initSDL() {
-    // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_Init Error: " << SDL_GetError() << '\n';
         exit(1);
     }
 
-    // Create window
     window = SDL_CreateWindow("AI Snake",
-                             SDL_WINDOWPOS_CENTERED,
-                             SDL_WINDOWPOS_CENTERED,
-                             WIDTH * CELL_SIZE,
-                             HEIGHT * CELL_SIZE,
-                             SDL_WINDOW_SHOWN);
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        WIDTH * CELL_SIZE,
+        HEIGHT * CELL_SIZE,
+        SDL_WINDOW_SHOWN);
+
     if (!window) {
-        std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_CreateWindow Error: " << SDL_GetError() << '\n';
         SDL_Quit();
         exit(1);
     }
 
-    // Create renderer
     renderer = SDL_CreateRenderer(window, -1, 
-                                SDL_RENDERER_ACCELERATED | 
-                                SDL_RENDERER_PRESENTVSYNC);
+        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
     if (!renderer) {
-        std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+        cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << '\n';
         SDL_DestroyWindow(window);
         SDL_Quit();
         exit(1);
     }
 
-    // Set renderer properties (only those supported by Emscripten)
-    if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) != 0) {
-        std::cerr << "SDL_SetRenderDrawBlendMode Error: " << SDL_GetError() << std::endl;
-    }
+    // Only set blend mode (remove logical size setting)
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
     // Set renderer properties
