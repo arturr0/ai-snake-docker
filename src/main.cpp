@@ -252,9 +252,30 @@ vector<pair<int,int>> findPathToFood(int sx,int sy)
 }
 
 // --------------------------------------------------------------
+// Reset snake to initial state after crash
+// --------------------------------------------------------------
+void resetSnake() {
+    ai_pion = HEIGHT / 2;
+    ai_poz = WIDTH / 2;
+    ai_longer = 2;
+    ai_pozycja = { {0,0}, {0,0}, {0,0}, {0,0} };
+    ai_pozycjac = { {0,0}, {0,0}, {0,0}, {0,0} };
+    ai_kolizja = false;
+    
+    // Reposition food
+    v1 = generuj();
+    auto freeTiles = wolne(ai_pozycjac, v1);
+    if (!freeTiles.empty()) {
+        int k = rand() % freeTiles.size();
+        food_x = freeTiles[k][0];
+        food_y = freeTiles[k][1];
+    }
+}
+
+// --------------------------------------------------------------
 // Main AI move – chooses action, updates Q‑table & state
 // --------------------------------------------------------------
-void aiMove(int& dir)
+bool aiMove(int& dir)
 {
     static int frame = 0;
     ++frame;
@@ -301,6 +322,12 @@ void aiMove(int& dir)
         case 3: ++ai_poz;  break;
     }
 
+    // Check for collision
+    ai_kolizja = !isValidPosition(ai_pion, ai_poz) || isAIBody(ai_pion, ai_poz);
+    if (ai_kolizja) {
+        return true; // signal that we crashed
+    }
+
     // helper list for logic (without head duplicate at slot 0)
     ai_pozycjac.insert(ai_pozycjac.begin(), {ai_pion, ai_poz});
     if (ai_pozycjac.size() > ai_longer + 2)
@@ -325,7 +352,7 @@ void aiMove(int& dir)
     if (ai_pozycja.size() > ai_longer + 1)
         ai_pozycja.resize(ai_longer + 1);
 
-    ai_kolizja = ai_urobos();
+    return false; // no crash
 }
 
 // --------------------------------------------------------------
@@ -334,22 +361,26 @@ void aiMove(int& dir)
 void main_loop()
 {
     static int ai_dir = rand() % 4;
+    static int reset_timer = 0;
 
-    if (!ai_kolizja && isValidPosition(ai_pion,ai_poz))
-    {
-        aiMove(ai_dir);
-        draw();
-
-        if (training_episodes < MAX_TRAINING_EPISODES) {
-            ++training_episodes;
-            exploration_rate = max(0.1f, exploration_rate - 0.001f);
+    if (reset_timer > 0) {
+        reset_timer--;
+        if (reset_timer == 0) {
+            resetSnake();
         }
+        return;
     }
-    else {
-#ifdef __EMSCRIPTEN__
-        emscripten_cancel_main_loop();
-        cout << "AI Crashed! Final Score: " << ai_punkty << '\n';
-#endif
+
+    bool crashed = aiMove(ai_dir);
+    draw();
+
+    if (training_episodes < MAX_TRAINING_EPISODES) {
+        ++training_episodes;
+        exploration_rate = max(0.1f, exploration_rate - 0.001f);
+    }
+
+    if (crashed) {
+        reset_timer = 10; // Wait 10 frames before restarting
     }
 }
 
@@ -375,9 +406,20 @@ int main()
     emscripten_set_main_loop(main_loop, 0, 1);
 #else
     static int ai_dir = rand() % 4;
-    while (!ai_kolizja && isValidPosition(ai_pion,ai_poz))
-    {
-        aiMove(ai_dir);
+    static int reset_timer = 0;
+    
+    bool running = true;
+    while (running) {
+        if (reset_timer > 0) {
+            reset_timer--;
+            if (reset_timer == 0) {
+                resetSnake();
+            }
+            SDL_Delay(czas);
+            continue;
+        }
+
+        bool crashed = aiMove(ai_dir);
         draw();
         SDL_Delay(czas);
 
@@ -385,8 +427,20 @@ int main()
             ++training_episodes;
             exploration_rate = max(0.1f, exploration_rate - 0.001f);
         }
+
+        if (crashed) {
+            reset_timer = 10;
+        }
+
+        // Check for quit event
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+        }
     }
-    cout << "AI Crashed! Final Score: " << ai_punkty << '\n';
+    cout << "Training complete. Final exploration rate: " << exploration_rate << endl;
 #endif
 
     SDL_DestroyRenderer(renderer);
