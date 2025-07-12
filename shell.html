@@ -16,41 +16,45 @@
             max-width: 1200px;
             margin: 0 auto;
         }
-        #game-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
         #status {
             text-align: center;
             margin-bottom: 20px;
-            font-size: 18px;
             padding: 10px;
             background: #333;
             border-radius: 5px;
         }
-        canvas {
+        #game-canvas {
             display: block;
+            margin: 0 auto;
             background: black;
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="game-container">
-            <canvas id="canvas" width="400" height="400"></canvas>
-        </div>
+        <div id="status">Loading game...</div>
+        <canvas id="game-canvas" width="400" height="400"></canvas>
     </div>
 
     <script>
     var Module = {
+        canvas: (function() {
+            var canvas = document.getElementById('game-canvas');
+            canvas.addEventListener('webglcontextlost', function(e) {
+                alert('WebGL context lost. Please reload the page.');
+                e.preventDefault();
+            }, false);
+            return canvas;
+        })(),
         onRuntimeInitialized: function() {
-            // This will be called when the WASM module is ready
-            document.getElementById('status').textContent = 'Game loaded - training started';
+            // Safe element access
+            var statusElement = document.getElementById('status');
+            if (statusElement) {
+                statusElement.textContent = 'Game loaded - training started';
+            }
         }
     };
     </script>
-    
-    {{{ SCRIPT }}}
+    <script src="aisnake_web.js"></script>
 </body>
 </html>
