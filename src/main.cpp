@@ -6,7 +6,7 @@
 #include <chrono>
 #include <queue>
 #include <cmath>
-#include <SDL2/SDL.h>
+#include <SDL.h>       
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
