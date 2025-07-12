@@ -442,7 +442,6 @@ extern "C" {
         return exploration_rate;
     }
 }
-#endif
 
 int main() {
     srand((unsigned)time(nullptr));
