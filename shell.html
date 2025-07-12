@@ -2,21 +2,205 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>AI Snake Game</title>
+    <title>AI Snake Training</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #111; color: white; }
-        #canvas-container { display: flex; justify-content: center; }
-        canvas { background: black; }
-        #status { text-align: center; font-family: sans-serif; padding: 10px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #222;
+            color: white;
+        }
+        #container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        #game-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        #charts {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .chart-container {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #status {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 18px;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        canvas {
+            display: block;
+            background: black;
+        }
     </style>
 </head>
 <body>
-    <div id="status">Loading game...</div>
-    <div id="canvas-container">
-        <canvas id="canvas" width="400" height="400"></canvas>
+    <div id="container">
+        <div id="status">Loading game...</div>
+        
+        <div id="game-container">
+            <canvas id="canvas" width="400" height="400"></canvas>
+        </div>
+        
+        <div id="charts">
+            <div class="chart-container">
+                <canvas id="scoreChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="qValueChart"></canvas>
+            </div>
+        </div>
     </div>
+
     <script>
+        // Initialize charts
+        const scoreCtx = document.getElementById('scoreChart').getContext('2d');
+        const qValueCtx = document.getElementById('qValueChart').getContext('2d');
+        
+        const scoreChart = new Chart(scoreCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Score',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Score Over Time',
+                        color: 'white'
+                    },
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Episode',
+                            color: 'white'
+                        },
+                        ticks: {
+                            color: 'white'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Score',
+                            color: 'white'
+                        },
+                        ticks: {
+                            color: 'white'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    }
+                }
+            }
+        });
+
+        const qValueChart = new Chart(qValueCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Q-value',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Average Q-value Over Time',
+                        color: 'white'
+                    },
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Episode',
+                            color: 'white'
+                        },
+                        ticks: {
+                            color: 'white'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Q-value',
+                            color: 'white'
+                        },
+                        ticks: {
+                            color: 'white'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Function to update charts from C++
+        function updateCharts(episode, score, avgQ) {
+            scoreChart.data.labels.push(episode);
+            scoreChart.data.datasets[0].data.push(score);
+            scoreChart.update();
+            
+            qValueChart.data.labels.push(episode);
+            qValueChart.data.datasets[0].data.push(avgQ);
+            qValueChart.update();
+            
+            document.getElementById('status').textContent = 
+                `Episode: ${episode} | Score: ${score} | Avg Q: ${avgQ.toFixed(2)} | Exploration: ${Module.getExplorationRate().toFixed(2)}`;
+        }
+
+        // Module configuration
         var Module = {
             canvas: (function() {
                 var canvas = document.getElementById('canvas');
@@ -25,9 +209,13 @@
                     e.preventDefault();
                 }, false);
                 return canvas;
-            })()
+            })(),
+            onRuntimeInitialized: function() {
+                document.getElementById('status').textContent = 'Game loaded - training started';
+            }
         };
     </script>
-    {{{ SCRIPT }}}
+    
+    <script src="aijs.js"></script>
 </body>
 </html>
