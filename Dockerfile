@@ -15,6 +15,9 @@ RUN mkdir -p build && \
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
 
+# Configure nginx to serve WASM with correct MIME type
+RUN echo "types { application/wasm wasm; }" > /etc/nginx/conf.d/wasm.conf
+
 COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
