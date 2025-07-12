@@ -33,11 +33,12 @@ vector<vector<int>> v1;
 
 // Q-learning
 vector<vector<float>> q_table;
-float learning_rate = 0.15f;  // Increased learning rate
-float discount_factor = 0.95f; // Increased discount factor
-float exploration_rate = 0.4f; // Higher initial exploration
+float learning_rate = 0.3f;       // Higher learning rate for faster adaptation
+float discount_factor = 0.95f;    // High discount factor for long-term planning
+float exploration_rate = 0.5f;    // Start with high exploration
 int training_episodes = 0;
-const int MAX_TRAINING_EPISODES = 5000; // More training episodes
+const int MAX_TRAINING_EPISODES = 20000; // More training episodes
+const float MIN_EXPLORATION = 0.01f; // Minimum exploration rate
 
 // SDL
 SDL_Window* window = nullptr;
@@ -72,6 +73,7 @@ void initSDL() {
 }
 
 void draw() {
+    // Clear screen
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
@@ -88,8 +90,10 @@ void draw() {
     // Draw snake body
     SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
     for (const auto& seg : ai_pozycja) {
-        SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-        SDL_RenderFillRect(renderer, &body);
+        if (seg.size() == 2) { // Safety check
+            SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+            SDL_RenderFillRect(renderer, &body);
+        }
     }
 
     // Draw snake head
@@ -97,6 +101,13 @@ void draw() {
     SDL_Rect head = {ai_poz * CELL_SIZE, ai_pion * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(renderer, &head);
 
+    // Display training info
+    SDL_Color textColor = {255, 255, 255, 255};
+    char infoText[100];
+    snprintf(infoText, sizeof(infoText), "Ep: %d Score: %d Exp: %.2f", 
+             training_episodes, ai_punkty, exploration_rate);
+    
+    // For native build you'd use SDL_TTF here, but for simplicity we'll skip it in this example
     SDL_RenderPresent(renderer);
 }
 
@@ -119,22 +130,13 @@ vector<vector<int>> wolne(const vector<vector<int>>& snake, vector<vector<int>> 
     return result;
 }
 
-bool ai_urobos() {
-    for (size_t i = 1; i < ai_pozycja.size(); ++i) {
-        if (ai_pion == ai_pozycja[i][0] && ai_poz == ai_pozycja[i][1]) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool isValidPosition(int x, int y) {
     return x >= 0 && x < HEIGHT && y >= 0 && y < WIDTH;
 }
 
 bool isAIBody(int x, int y) {
     for (const auto& seg : ai_pozycja) {
-        if (seg[0] == x && seg[1] == y) {
+        if (seg.size() == 2 && seg[0] == x && seg[1] == y) {
             return true;
         }
     }
@@ -142,32 +144,20 @@ bool isAIBody(int x, int y) {
 }
 
 void initQTable() {
-    // State includes: position (x,y), direction, and distance to walls
-    q_table.resize(WIDTH * HEIGHT * 4 * 4); // 4 directions * 4 wall distances
+    // State includes: position (x,y) and direction
+    q_table.resize(WIDTH * HEIGHT * 4); // 4 possible directions
     for (auto& row : q_table) {
         row.assign(4, 0.0f);
-        // Initialize with small negative values to discourage random moves
+        // Initialize with small random values to break symmetry
         for (float& val : row) {
-            val = -0.1f;
+            val = (rand() % 100) / 1000.0f - 0.05f; // Small random values around zero
         }
-    }
-}
-
-int getWallDistance(int x, int y, int dir) {
-    switch(dir) {
-        case 0: return x;         // Distance to top wall
-        case 1: return HEIGHT-1-x; // Distance to bottom wall
-        case 2: return y;         // Distance to left wall
-        case 3: return WIDTH-1-y; // Distance to right wall
-        default: return 0;
     }
 }
 
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
-    
-    int wall_dist = min(3, getWallDistance(x, y, dir)); // Quantize to 0-3
-    return ((y * WIDTH + x) * 4 + dir) * 4 + wall_dist;
+    return (y * WIDTH + x) * 4 + dir;
 }
 
 int chooseAction(int x, int y, int current_dir) {
@@ -196,18 +186,18 @@ void updateQTable(int ox, int oy, int odir, int action, int nx, int ny, float re
 }
 
 float calculateReward(int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -100.0f; // Strong penalty for crashing
-    if (got_food) return 50.0f;  // Reward for getting food
+    if (crashed) return -200.0f; // Very strong penalty for crashing
+    if (got_food) return 100.0f; // Strong reward for getting food
     
-    // Penalize getting too close to walls
+    // Penalize being near walls
     int min_wall_dist = min(min(x, HEIGHT-1-x), min(y, WIDTH-1-y));
-    if (min_wall_dist == 0) return -10.0f;
-    if (min_wall_dist == 1) return -2.0f;
+    if (min_wall_dist == 0) return -50.0f;  // Touching wall
+    if (min_wall_dist == 1) return -10.0f;  // One step from wall
     
-    // Reward/punish based on distance to food
+    // Reward based on distance to food (normalized)
     float dist = sqrtf((x-food_x)*(x-food_x) + (y-food_y)*(y-food_y));
     float max_dist = sqrtf(WIDTH*WIDTH + HEIGHT*HEIGHT);
-    return 1.0f - (dist / max_dist); // Closer = higher reward
+    return 5.0f * (1.0f - (dist / max_dist)); // Stronger distance-based reward
 }
 
 void resetSnake() {
@@ -272,6 +262,8 @@ bool aiMove(int& dir) {
             }
             if (!safe_actions.empty()) {
                 dir = safe_actions[rand() % safe_actions.size()];
+            } else {
+                return true; // No safe moves available
             }
         }
     }
@@ -333,7 +325,8 @@ void main_loop() {
 
     if (training_episodes < MAX_TRAINING_EPISODES) {
         ++training_episodes;
-        exploration_rate = max(0.01f, exploration_rate * 0.9995f); // Slow decay
+        // Slow exponential decay of exploration rate
+        exploration_rate = max(MIN_EXPLORATION, exploration_rate * 0.9999f);
     }
 
     if (crashed) {
@@ -381,7 +374,7 @@ int main() {
 
         if (training_episodes < MAX_TRAINING_EPISODES) {
             ++training_episodes;
-            exploration_rate = max(0.01f, exploration_rate * 0.9995f);
+            exploration_rate = max(MIN_EXPLORATION, exploration_rate * 0.9999f);
         }
 
         if (crashed) {
