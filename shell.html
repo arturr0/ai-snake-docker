@@ -11,27 +11,6 @@
 </head>
 <body>
     <div id="status">Loading AI Snake...</div>
-    
-    <script>
-        var Module = {
-            canvas: (function() {
-                var canvas = document.createElement('canvas');
-                canvas.id = 'canvas';
-                canvas.style.display = 'block';
-                canvas.style.margin = '0 auto';
-                canvas.style.background = '#000';
-                document.body.insertBefore(canvas, document.body.firstChild);
-                return canvas;
-            })(),
-            onRuntimeInitialized: function() {
-                Module.ccall('start_game', 'void', [], []);
-                document.getElementById('status').textContent = "AI Snake Running";
-            },
-            print: function(text) { console.log(text); },
-            printErr: function(text) { console.error(text); }
-        };
-    </script>
-    
-    <script src="aisnake_web.js"></script>
+    {{{ SCRIPT }}}
 </body>
 </html>
