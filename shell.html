@@ -21,16 +21,6 @@
             justify-content: center;
             margin-bottom: 20px;
         }
-        #charts {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .chart-container {
-            background: #333;
-            padding: 15px;
-            border-radius: 8px;
-        }
         #status {
             text-align: center;
             margin-bottom: 20px;
@@ -47,61 +37,32 @@
 </head>
 <body>
     <div id="container">
-        
+        <div id="status">Loading game...</div>
         <div id="game-container">
             <canvas id="canvas" width="400" height="400"></canvas>
         </div>
-        
-        <div id="charts">
-            <div class="chart-container">
-                <canvas id="scoreChart"></canvas>
-            </div>
-            <div class="chart-container">
-                <canvas id="qValueChart"></canvas>
-            </div>
-        </div>
     </div>
 
-    {{{ SCRIPT }}}
     <script>
-var Module = {
-    canvas: (function() {
-        var canvas = document.getElementById('canvas');
-        // WebGL2 context creation fallback
-        var context = null;
-        try {
-            context = canvas.getContext('webgl2', {
-                antialias: false,
-                preserveDrawingBuffer: false,
-                powerPreference: "high-performance"
-            });
-        } catch (e) {
-            console.error("WebGL2 initialization failed:", e);
+    var Module = {
+        canvas: (function() {
+            var canvas = document.getElementById('canvas');
+            canvas.addEventListener('webglcontextlost', function(e) {
+                alert('WebGL context lost. Please reload the page.');
+                e.preventDefault();
+            }, false);
+            return canvas;
+        })(),
+        onRuntimeInitialized: function() {
+            // Ensure elements exist before accessing them
+            var statusElement = document.getElementById('status');
+            if (statusElement) {
+                statusElement.textContent = 'Game loaded - training started';
+            }
         }
-        
-        if (!context) {
-            alert('WebGL2 is not supported in your browser. Please try Chrome, Firefox, or Edge.');
-            throw new Error('WebGL2 not supported');
-        }
-        
-        canvas.addEventListener('webglcontextlost', function(e) {
-            console.error('WebGL context lost');
-            e.preventDefault();
-            window.location.reload();
-        }, false);
-        
-        return canvas;
-    })(),
-    onRuntimeInitialized: function() {
-        document.getElementById('status').textContent = 'Game loaded - training started';
-    },
-    print: function(text) {
-        console.log(text);
-    },
-    printErr: function(text) {
-        console.error(text);
-    }
-};
-</script>
+    };
+    </script>
+    
+    {{{ SCRIPT }}}
 </body>
 </html>
