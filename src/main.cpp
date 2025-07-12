@@ -6,7 +6,19 @@
 #include <chrono>
 #include <queue>
 #include <cmath>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// #include <SDL2/SDL.h>
+#else
+// #include <windows.h>
+#endif  // <-- This was missing
+
+#ifdef __EMSCRIPTEN__
 #include <SDL2/SDL.h>
+#else
+#include <SDL.h>
+#endif
 
 using namespace std;
 
@@ -37,34 +49,19 @@ float exploration_rate = 0.3f;
 int training_episodes = 0;
 const int MAX_TRAINING_EPISODES = 1000;
 
+#ifdef __EMSCRIPTEN__
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 void initSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO)) {
-        cerr << "SDL_Init Error: " << SDL_GetError() << endl;
-        exit(1);
-    }
-
+    SDL_Init(SDL_INIT_VIDEO);
     window = SDL_CreateWindow("AI Snake", 
-                            SDL_WINDOWPOS_CENTERED, 
-                            SDL_WINDOWPOS_CENTERED,
-                            WIDTH * CELL_SIZE, 
-                            HEIGHT * CELL_SIZE + 60,
-                            SDL_WINDOW_SHOWN);
-    if (!window) {
-        cerr << "SDL_CreateWindow Error: " << SDL_GetError() << endl;
-        SDL_Quit();
-        exit(1);
-    }
-
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) {
-        cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << endl;
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        exit(1);
-    }
+                             SDL_WINDOWPOS_CENTERED, 
+                             SDL_WINDOWPOS_CENTERED,
+                             WIDTH * CELL_SIZE, 
+                             HEIGHT * CELL_SIZE + 60,
+                             SDL_WINDOW_SHOWN);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 }
 
 void draw() {
@@ -97,9 +94,13 @@ void draw() {
     string scoreText = "AI Score: " + to_string(ai_punkty) + " | Training: " + 
                       to_string(training_episodes) + "/" + to_string(MAX_TRAINING_EPISODES);
     SDL_FillRect(surface, nullptr, SDL_MapRGB(surface->format, 0, 0, 0));
+    // Note: For actual text rendering, you'd need SDL_ttf or pre-rendered text
     
     SDL_RenderPresent(renderer);
 }
+#else
+// Native Windows drawing functions would go here
+#endif
 
 vector<vector<int>> generuj() {
     int idx = 0;
@@ -142,12 +143,20 @@ void initQTable() {
     }
 }
 
+void saveQTable() {
+    // In browser, this would need to use IndexedDB or similar
+}
+
+void loadQTable() {
+    // In browser, this would need to use IndexedDB or similar
+}
+
 int getStateIndex(int x, int y, int dir) {
     return (y * WIDTH + x) * 4 + dir;
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate && training_episodes < MAX_TRAINING_EPISODES) {
+if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate && training_episodes < MAX_TRAINING_EPISODES) {
         return rand() % 4;
     } else {
         int state = getStateIndex(x, y, current_dir);
@@ -324,9 +333,10 @@ int main() {
     }
     
     initQTable();
-    initSDL();
+    loadQTable();
     
     #ifdef __EMSCRIPTEN__
+    initSDL();
     emscripten_set_main_loop(main_loop, 0, 1);
     #else
     while (!ai_kolizja && 
@@ -336,7 +346,7 @@ int main() {
         static int ai_dir = rand() % 4;
         aiMove(ai_dir);
         draw();
-        SDL_Delay(czas);
+        this_thread::sleep_for(chrono::milliseconds(czas));
         
         if (training_episodes < MAX_TRAINING_EPISODES) {
             training_episodes++;
@@ -346,10 +356,6 @@ int main() {
     
     cout << "AI Crashed! Final Score: " << ai_punkty << endl;
     #endif
-    
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
     
     return 0;
 }
