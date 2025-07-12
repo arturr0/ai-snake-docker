@@ -175,20 +175,12 @@ void initSDL() {
         exit(1);
     }
 
-    // Set WebGL/OpenGL ES attributes
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
     window = SDL_CreateWindow("AI Snake",
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
         WIDTH * CELL_SIZE,
         HEIGHT * CELL_SIZE,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        SDL_WINDOW_SHOWN);
 
     if (!window) {
         cerr << "SDL_CreateWindow Error: " << SDL_GetError() << '\n';
@@ -205,6 +197,12 @@ void initSDL() {
         SDL_Quit();
         exit(1);
     }
+
+    // Set basic renderer properties
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+}
+
+   
 
     // Set renderer properties
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
