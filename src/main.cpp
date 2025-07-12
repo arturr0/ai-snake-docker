@@ -41,7 +41,7 @@ SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 void initSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO) {
+    if (SDL_Init(SDL_INIT_VIDEO)) {
         cerr << "SDL_Init Error: " << SDL_GetError() << endl;
         exit(1);
     }
