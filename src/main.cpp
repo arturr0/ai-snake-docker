@@ -7,7 +7,9 @@
 #include <queue>
 #include <cmath>
 #include <SDL2/SDL.h>
-
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 using namespace std;
 
 // Game constants
