@@ -15,6 +15,8 @@ if(EMSCRIPTEN)
         -sENVIRONMENT=web
         -sMODULARIZE=1
         -sEXPORT_NAME=AISnakeModule
+        -sEXPORTED_FUNCTIONS=['_main','_start_game']
+        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']
     )
     
     set(CMAKE_EXE_LINKER_FLAGS 
