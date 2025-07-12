@@ -20,9 +20,12 @@ RUN mkdir -p build && \
 # Stage 2: Serve with Nginx
 FROM nginx:1.25-alpine
 
+# Copy build artifacts
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/index.html
-COPY shell.html /usr/share/nginx/html/  # Backup shell file
+
+# Copy shell.html (ensure it exists in build context)
+COPY shell.html /usr/share/nginx/html/
 
 EXPOSE 80
