@@ -28,33 +28,61 @@
             margin: 0 auto;
             background: black;
         }
+        #loading {
+            text-align: center;
+            margin: 20px;
+            font-size: 18px;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="status">Loading game...</div>
-        <canvas id="game-canvas" width="400" height="400"></canvas>
+        <div id="loading">Loading WebAssembly application...</div>
+        <div id="status" class="hidden">Loading game...</div>
+        <canvas id="game-canvas" width="400" height="400" class="hidden"></canvas>
     </div>
 
+    <!-- This script block must come before the SCRIPT placeholder -->
     <script>
-    var Module = {
-        canvas: (function() {
-            var canvas = document.getElementById('game-canvas');
-            canvas.addEventListener('webglcontextlost', function(e) {
-                alert('WebGL context lost. Please reload the page.');
-                e.preventDefault();
-            }, false);
-            return canvas;
-        })(),
-        onRuntimeInitialized: function() {
-            // Safe element access
-            var statusElement = document.getElementById('status');
-            if (statusElement) {
-                statusElement.textContent = 'Game loaded - training started';
-            }
+    // This will be merged with Emscripten's generated Module object
+    var Module = Module || {};
+    Module.canvas = (function() {
+        var canvas = document.getElementById('game-canvas');
+        canvas.addEventListener('webglcontextlost', function(e) {
+            alert('WebGL context lost. Please reload the page.');
+            e.preventDefault();
+        }, false);
+        return canvas;
+    })();
+    Module.onRuntimeInitialized = function() {
+        // Hide loading indicator
+        var loadingElement = document.getElementById('loading');
+        if (loadingElement) loadingElement.classList.add('hidden');
+        
+        // Show game elements
+        var statusElement = document.getElementById('status');
+        var canvasElement = document.getElementById('game-canvas');
+        
+        if (statusElement) {
+            statusElement.classList.remove('hidden');
+            statusElement.textContent = 'Game loaded - training started';
+        }
+        
+        if (canvasElement) {
+            canvasElement.classList.remove('hidden');
         }
     };
+    Module.printErr = function(text) {
+        console.error(text);
+        var statusElement = document.getElementById('status');
+        if (statusElement) statusElement.textContent = 'Error: ' + text;
+    };
     </script>
-    <script src="aisnake_web.js"></script>
+
+    <!-- This MUST be present for Emscripten -->
+    {{{ SCRIPT }}}
 </body>
 </html>
