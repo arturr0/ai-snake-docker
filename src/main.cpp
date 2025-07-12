@@ -93,13 +93,20 @@ EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
     var statusElement = document.getElementById('status');
     if (statusElement) {
         try {
-            var explorationRate = Module.getExplorationRate();
+            // Use ccall to safely call the function
+            var explorationRate = Module.ccall(
+                'getExplorationRate', // function name
+                'number',            // return type
+                [],                  // argument types
+                []                   // arguments
+            );
             statusElement.innerHTML = 
                 `Episode: ${episode} | Score: ${score} | Exploration: ${explorationRate.toFixed(2)}`;
         } catch(e) {
-            console.error('Error updating status:', e);
+            console.error('Error getting exploration rate:', e);
+            statusElement.innerHTML = 
+                `Episode: ${episode} | Score: ${score}`;
         }
-    }
     
     if (window.scoreChart && window.qValueChart) {
         // Update charts...
