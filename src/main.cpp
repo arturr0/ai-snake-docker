@@ -170,41 +170,40 @@ void logPerformance() {
 }
 
 void initSDL() {
+    // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        cerr << "SDL_Init Error: " << SDL_GetError() << '\n';
+        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
         exit(1);
     }
 
+    // Create window
     window = SDL_CreateWindow("AI Snake",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        WIDTH * CELL_SIZE,
-        HEIGHT * CELL_SIZE,
-        SDL_WINDOW_SHOWN);
-
+                            SDL_WINDOWPOS_CENTERED,
+                            SDL_WINDOWPOS_CENTERED,
+                            WIDTH * CELL_SIZE,
+                            HEIGHT * CELL_SIZE,
+                            SDL_WINDOW_SHOWN);
     if (!window) {
-        cerr << "SDL_CreateWindow Error: " << SDL_GetError() << '\n';
+        std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
         SDL_Quit();
         exit(1);
     }
 
+    // Create renderer
     renderer = SDL_CreateRenderer(window, -1, 
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-
+                                SDL_RENDERER_ACCELERATED | 
+                                SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
-        cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << '\n';
+        std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
         SDL_DestroyWindow(window);
         SDL_Quit();
         exit(1);
     }
 
-    // Only set blend mode (remove logical size setting)
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-}
-
-    // Set renderer properties
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderSetLogicalSize(renderer, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE);
+    // Set blend mode (remove logical size as it's not supported in Emscripten)
+    if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) != 0) {
+        std::cerr << "SDL_SetRenderDrawBlendMode Error: " << SDL_GetError() << std::endl;
+    }
 }
 
 void draw() {
