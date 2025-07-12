@@ -44,20 +44,9 @@
 
     <script>
     var Module = {
-        canvas: (function() {
-            var canvas = document.getElementById('canvas');
-            canvas.addEventListener('webglcontextlost', function(e) {
-                alert('WebGL context lost. Please reload the page.');
-                e.preventDefault();
-            }, false);
-            return canvas;
-        })(),
         onRuntimeInitialized: function() {
-            // Ensure elements exist before accessing them
-            var statusElement = document.getElementById('status');
-            if (statusElement) {
-                statusElement.textContent = 'Game loaded - training started';
-            }
+            // This will be called when the WASM module is ready
+            document.getElementById('status').textContent = 'Game loaded - training started';
         }
     };
     </script>
