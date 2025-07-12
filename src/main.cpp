@@ -52,89 +52,87 @@ SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 #ifdef __EMSCRIPTEN__
-// Update the EM_JS initChartJS function to be more robust
 EM_JS(void, initChartJS, (), {
-    // Wait until DOM is fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        // Create container if it doesn't exist
-        let container = document.getElementById('chart-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'chart-container';
-            container.style.width = '800px';
-            container.style.margin = '0 auto';
-            container.style.backgroundColor = '#222';
-            container.style.padding = '20px';
-            container.style.borderRadius = '10px';
-            document.body.appendChild(container);
-        }
+    // Create container if it doesn't exist
+    let container = document.getElementById('chart-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'chart-container';
+        container.style.width = '800px';
+        container.style.margin = '0 auto';
+        container.style.backgroundColor = '#222';
+        container.style.padding = '20px';
+        container.style.borderRadius = '10px';
+        document.body.appendChild(container);
+    }
 
-        // Create status element if it doesn't exist
-        let statusElement = document.getElementById('status');
-        if (!statusElement) {
-            statusElement = document.createElement('div');
-            statusElement.id = 'status';
-            statusElement.style.textAlign = 'center';
-            statusElement.style.marginBottom = '20px';
-            statusElement.style.fontSize = '18px';
-            statusElement.style.padding = '10px';
-            statusElement.style.backgroundColor = '#333';
-            statusElement.style.borderRadius = '5px';
-            container.insertBefore(statusElement, container.firstChild);
-        }
+    // Create status element if it doesn't exist
+    let statusElement = document.getElementById('status');
+    if (!statusElement) {
+        statusElement = document.createElement('div');
+        statusElement.id = 'status';
+        statusElement.style.textAlign = 'center';
+        statusElement.style.marginBottom = '20px';
+        statusElement.style.fontSize = '18px';
+        statusElement.style.padding = '10px';
+        statusElement.style.backgroundColor = '#333';
+        statusElement.style.borderRadius = '5px';
+        container.insertBefore(statusElement, container.firstChild);
+    }
 
-        // Initialize charts only if they don't exist
-        if (typeof window.scoreChart === 'undefined') {
-            const scoreCanvas = document.createElement('canvas');
-            scoreCanvas.id = 'scoreChart';
-            scoreCanvas.width = 800;
-            scoreCanvas.height = 400;
-            container.appendChild(scoreCanvas);
+    // Initialize charts only if they don't exist
+    if (typeof window.scoreChart === 'undefined') {
+        const scoreCanvas = document.createElement('canvas');
+        scoreCanvas.id = 'scoreChart';
+        scoreCanvas.width = 800;
+        scoreCanvas.height = 400;
+        container.appendChild(scoreCanvas);
 
-            const qValueCanvas = document.createElement('canvas');
-            qValueCanvas.id = 'qValueChart';
-            qValueCanvas.width = 800;
-            qValueCanvas.height = 400;
-            container.appendChild(qValueCanvas);
+        const qValueCanvas = document.createElement('canvas');
+        qValueCanvas.id = 'qValueChart';
+        qValueCanvas.width = 800;
+        qValueCanvas.height = 400;
+        container.appendChild(qValueCanvas);
 
-            window.scoreChart = new Chart(scoreCanvas, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Score',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1,
-                        fill: false
-                    }]
-                },
-                options:
-            responsive: false,
-            scales: {
-                y: {
-                    beginAtZero: true
+        window.scoreChart = new Chart(scoreCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Score',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
                 }
             }
-        }
-    });
+        });
 
-    window.qValueChart = new Chart(qValueCanvas, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Average Q-value',
-                data: [],
-                borderColor: 'rgb(255, 99, 132)',
-                tension: 0.1,
-                fill: false
-            }]
-        },
-        options: {
-            responsive: false
-        }
-    });
+        window.qValueChart = new Chart(qValueCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Q-value',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: false
+            }
+        });
+    }
 });
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
@@ -143,11 +141,6 @@ EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
     if (statusElement) {
         statusElement.innerHTML = 
             `Episode: ${episode} | Score: ${score} | Exploration: ${Module.getExplorationRate().toFixed(2)}`;
-    }
-    
-    // Initialize charts if they don't exist
-    if (typeof window.scoreChart === 'undefined') {
-        // Chart initialization code here...
     }
     
     // Update charts if they exist
