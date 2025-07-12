@@ -112,9 +112,7 @@ EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
         console.error('Chart update error:', e);
     }
     
-    // Rest of your chart update code...
-});
-    }
+  
     
     if (window.scoreChart && window.qValueChart) {
         // Update charts...
