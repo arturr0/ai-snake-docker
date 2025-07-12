@@ -9,12 +9,6 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-// #include <SDL2/SDL.h>
-#else
-// #include <windows.h>
-#endif  // <-- This was missing
-
-#ifdef __EMSCRIPTEN__
 #include <SDL2/SDL.h>
 #else
 #include <SDL.h>
@@ -54,14 +48,27 @@ SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 void initSDL() {
-    SDL_Init(SDL_INIT_VIDEO);
+    if(SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+        return;
+    }
+    
     window = SDL_CreateWindow("AI Snake", 
-                             SDL_WINDOWPOS_CENTERED, 
-                             SDL_WINDOWPOS_CENTERED,
-                             WIDTH * CELL_SIZE, 
-                             HEIGHT * CELL_SIZE + 60,
-                             SDL_WINDOW_SHOWN);
+                            SDL_WINDOWPOS_CENTERED, 
+                            SDL_WINDOWPOS_CENTERED,
+                            WIDTH * CELL_SIZE, 
+                            HEIGHT * CELL_SIZE + 60,
+                            SDL_WINDOW_SHOWN);
+    if(window == nullptr) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        return;
+    }
+    
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if(renderer == nullptr) {
+        printf("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
+        return;
+    }
 }
 
 void draw() {
@@ -87,14 +94,6 @@ void draw() {
         SDL_Rect body = {segment[1] * CELL_SIZE, segment[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
         SDL_RenderFillRect(renderer, &body);
     }
-    
-    // Draw score
-    SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface* surface = SDL_CreateRGBSurface(0, WIDTH * CELL_SIZE, 60, 32, 0, 0, 0, 0);
-    string scoreText = "AI Score: " + to_string(ai_punkty) + " | Training: " + 
-                      to_string(training_episodes) + "/" + to_string(MAX_TRAINING_EPISODES);
-    SDL_FillRect(surface, nullptr, SDL_MapRGB(surface->format, 0, 0, 0));
-    // Note: For actual text rendering, you'd need SDL_ttf or pre-rendered text
     
     SDL_RenderPresent(renderer);
 }
@@ -156,25 +155,26 @@ int getStateIndex(int x, int y, int dir) {
 }
 
 int chooseAction(int x, int y, int current_dir) {
-if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate && training_episodes < MAX_TRAINING_EPISODES) {
+    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < exploration_rate && 
+        training_episodes < MAX_TRAINING_EPISODES) {
         return rand() % 4;
     } else {
         int state = getStateIndex(x, y, current_dir);
         return distance(q_table[state].begin(), 
-                       max_element(q_table[state].begin(), q_table[state].end()));
+                      max_element(q_table[state].begin(), q_table[state].end()));
     }
 }
 
 void updateQTable(int old_x, int old_y, int old_dir, int action, 
-                 int new_x, int new_y, float reward) {
+                int new_x, int new_y, float reward) {
     int old_state = getStateIndex(old_x, old_y, old_dir);
     int new_state = getStateIndex(new_x, new_y, action);
     
     float best_future_value = *max_element(q_table[new_state].begin(), 
-                                         q_table[new_state].end());
+                                        q_table[new_state].end());
     
     q_table[old_state][action] = (1 - learning_rate) * q_table[old_state][action] + 
-                                learning_rate * (reward + discount_factor * best_future_value);
+                               learning_rate * (reward + discount_factor * best_future_value);
 }
 
 float calculateReward(int x, int y, bool got_food, bool crashed) {
@@ -320,6 +320,14 @@ void main_loop() {
         #endif
     }
 }
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+void start_game() {
+    initSDL();
+    emscripten_set_main_loop(main_loop, 0, 1);
+}
+#endif
 
 int main() {
     srand((unsigned int)time(NULL));
