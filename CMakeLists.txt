@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
-    # These must be separate options, not a string
     add_compile_options(
         -O3
         -sUSE_SDL=2
@@ -16,10 +15,7 @@ if(EMSCRIPTEN)
         -sENVIRONMENT=web
     )
     
-    # Linker options must also be separate
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL_IMAGE=2")
 else()
     find_package(SDL2 REQUIRED)
     add_compile_options(-O3)
