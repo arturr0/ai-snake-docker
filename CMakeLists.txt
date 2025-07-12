@@ -10,11 +10,11 @@ if(EMSCRIPTEN)
     add_compile_options(
         -O3
         -sUSE_SDL=2
+        -sUSE_WEBGL2=1
+        -sFULL_ES3=1
         -sALLOW_MEMORY_GROWTH=1
         -sMAXIMUM_MEMORY=256MB
-        -sINITIAL_MEMORY=64MB
         -sNO_EXIT_RUNTIME=1
-        -sENVIRONMENT=web
         -sASSERTIONS=1
     )
     
@@ -22,21 +22,9 @@ if(EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
     set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
-    set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate']")
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']")
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sNO_FILESYSTEM=1")
-    set(CMAKE_EXE_LINKER_FLAGS 
-    "${CMAKE_EXE_LINKER_FLAGS} -sUSE_SDL=2")
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2")
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sFULL_ES3=1")
-    set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} -sGL_PREINITIALIZED_CONTEXT=1")
 else()
     find_package(SDL2 REQUIRED)
     add_compile_options(-O3)
