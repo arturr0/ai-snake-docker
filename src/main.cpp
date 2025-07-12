@@ -139,8 +139,16 @@ EM_JS(void, updateCharts, (int episode, int score, float avg_q), {
     // Safe element access
     var statusElement = document.getElementById('status');
     if (statusElement) {
-        statusElement.innerHTML = 
-            `Episode: ${episode} | Score: ${score} | Exploration: ${Module.getExplorationRate().toFixed(2)}`;
+        try {
+            // Use ccall to call the exported function
+            var explorationRate = Module.ccall('getExplorationRate', 'number', [], []);
+            statusElement.innerHTML = 
+                `Episode: ${episode} | Score: ${score} | Exploration: ${explorationRate.toFixed(2)}`;
+        } catch (e) {
+            console.error('Error getting exploration rate:', e);
+            statusElement.innerHTML = 
+                `Episode: ${episode} | Score: ${score}`;
+        }
     }
     
     // Update charts if they exist
