@@ -25,6 +25,7 @@ if(EMSCRIPTEN)
         -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
         -sMODULARIZE=1
         -sALLOW_MEMORY_GROWTH=1
+        -sUSE_SDL=2  # This must be in both compile and link flags
     )
 else()
     find_package(SDL2 REQUIRED)
