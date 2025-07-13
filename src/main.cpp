@@ -45,10 +45,10 @@ struct GameState {
 struct QLearning {
     vector<vector<float>> table;
     float learning_rate = 0.1f;
-    float discount_factor = 0.9f;
+    float discount_factor = 0.95f;  // Increased from 0.9
     float exploration_rate = 1.0f;
     int episodes = 0;
-    const float exploration_decay = 0.9997f; // Slightly slower decay
+    const float exploration_decay = 0.9995f;
 };
 
 // Performance tracking
@@ -73,7 +73,7 @@ SDLResources sdl;
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
-    // Initialize charts when everything is ready
+    // Initialize when both DOM and WASM are ready
     function init() {
         if (typeof Chart === 'undefined' || !document.getElementById('game-canvas')) {
             setTimeout(init, 100);
@@ -88,59 +88,44 @@ EM_JS(void, initChartJS, (), {
             container.style.margin = '20px auto';
             container.style.padding = '20px';
             container.style.backgroundColor = '#333';
-            document.body.insertBefore(container, document.getElementById('game-canvas').nextSibling);
+            document.body.appendChild(container);
         }
 
         // Create chart canvases
-        var charts = ['scoreChart', 'qValueChart', 'lifetimeChart'];
-        charts.forEach(function(id) {
-            if (!document.getElementById(id)) {
+        var charts = [
+            {id: 'scoreChart', label: 'Score', color: '75, 192, 192'},
+            {id: 'qValueChart', label: 'Avg Q-Value', color: '153, 102, 255'}, 
+            {id: 'lifetimeChart', label: 'Lifetime Score', color: '255, 99, 132'}
+        ];
+
+        charts.forEach(function(chart) {
+            if (!document.getElementById(chart.id)) {
                 var canvas = document.createElement('canvas');
-                canvas.id = id;
+                canvas.id = chart.id;
                 canvas.style.marginBottom = '20px';
                 container.appendChild(canvas);
+
+                window[chart.id] = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: chart.label,
+                            data: [],
+                            borderColor: `rgba(${chart.color}, 1)`,
+                            borderWidth: 1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: { y: { beginAtZero: false } }
+                    }
+                });
             }
-        });
-
-        // Initialize charts
-        window.scoreChart = new Chart(document.getElementById('scoreChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{
-                label: 'Score',
-                data: [],
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1,
-                fill: false
-            }]},
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
-        });
-
-        window.qValueChart = new Chart(document.getElementById('qValueChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{
-                label: 'Avg Q-Value',
-                data: [],
-                borderColor: 'rgba(153, 102, 255, 1)',
-                borderWidth: 1,
-                fill: false
-            }]},
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
-        });
-
-        window.lifetimeChart = new Chart(document.getElementById('lifetimeChart'), {
-            type: 'line',
-            data: { labels: [], datasets: [{
-                label: 'Lifetime Score',
-                data: [],
-                borderColor: 'rgba(255, 99, 132, 1)',
-                borderWidth: 1,
-                fill: false
-            }]},
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
         });
     }
 
-    // Start initialization
     if (document.readyState === 'complete') {
         init();
     } else {
@@ -150,31 +135,27 @@ EM_JS(void, initChartJS, (), {
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
     try {
-        // Update status display
+        // Update status
         var status = document.getElementById('status');
         if (status) {
-            status.innerHTML = 'Episode: ' + episode + 
-                ' | Score: ' + score + 
-                ' | Lifetime: ' + lifetime_score +
-                ' | Avg Q: ' + avg_q.toFixed(2) +
-                ' | Explore: ' + exploration.toFixed(3);
+            status.innerHTML = `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Explore: ${exploration.toFixed(3)}`;
         }
 
-        // Update charts if they exist
+        // Update charts
         if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
-            function update(chart, value) {
+            function updateChart(chart, value) {
                 chart.data.labels.push(episode);
                 chart.data.datasets[0].data.push(value);
-                if (chart.data.labels.length > 200) {
+                if (chart.data.labels.length > 500) {
                     chart.data.labels.shift();
                     chart.data.datasets[0].data.shift();
                 }
                 chart.update();
             }
 
-            update(window.scoreChart, score);
-            update(window.qValueChart, avg_q);
-            update(window.lifetimeChart, lifetime_score);
+            updateChart(window.scoreChart, score);
+            updateChart(window.qValueChart, avg_q);
+            updateChart(window.lifetimeChart, lifetime_score);
         }
     } catch(e) {
         console.error('Chart error:', e);
@@ -226,11 +207,7 @@ void initQTable() {
     // More compact state representation
     q_learning.table.resize(WIDTH * HEIGHT * 128);
     for (auto& row : q_learning.table) {
-        row.assign(4, 0.0f);
-        // Small random initial values
-        for (float& val : row) {
-            val = (rand() % 100) / 1000.0f - 0.05f;
-        }
+        row.assign(4, 0.1f);  // Start with small positive values
     }
 }
 
@@ -251,18 +228,21 @@ int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
     if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
     
-    // Body proximity (8-way)
+    // Body proximity (4-way within 3 cells)
     int proximity = 0;
-    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
-    for (int i = 0; i < 8; i++) {
-        int nx = x + directions[i][0];
-        int ny = y + directions[i][1];
-        if (isValidPosition(nx, ny) && isBodyPosition(nx, ny, false)) {
-            proximity |= (1 << i);
+    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
+    for (int i = 0; i < 4; i++) {
+        for (int dist = 1; dist <= 3; dist++) {
+            int nx = x + directions[i][0] * dist;
+            int ny = y + directions[i][1] * dist;
+            if (isValidPosition(nx, ny) && isBodyPosition(nx, ny, false)) {
+                proximity |= (1 << (i + 4 * (dist - 1)));
+                break;
+            }
         }
     }
     
-    return (y * WIDTH + x) * 128 + dir * 32 + food_dir * 4 + danger * 2 + (proximity > 0 ? 1 : 0);
+    return (y * WIDTH + x) * 128 + dir * 32 + food_dir * 4 + danger + proximity;
 }
 
 int chooseAction(int x, int y, int current_dir) {
@@ -290,36 +270,35 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -100.0f;  // Strong penalty for crashing
-    if (got_food) return 50.0f;   // Original food reward
+    if (crashed) return -50.0f;  // Reduced from -100 to prevent overly negative Q-values
     
-    // Distance-based reward
-    float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y); // Manhattan distance
+    if (got_food) return 20.0f;   // Reduced from 50 but still strongly positive
+    
+    // Distance reward (Manhattan distance)
+    float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y);
     float new_dist = abs(x-game.food_x) + abs(y-game.food_y);
-    float dist_reward = (prev_dist - new_dist) * 2.0f; // Moderate distance reward
+    float dist_reward = (prev_dist - new_dist) * 1.0f; // Reduced from 2.0
     
-    // Progressive body penalty
+    // Body proximity penalty
     float body_penalty = 0.0f;
-    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
-    for (int i = 0; i < 8; i++) {
-        int nx = x + directions[i][0];
-        int ny = y + directions[i][1];
-        int dist = 1;
-        while (isValidPosition(nx, ny)) {
-            if (isBodyPosition(nx, ny, false)) {
-                body_penalty -= 5.0f / dist; // Stronger penalty for closer body parts
-                break;
+    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
+    for (int i = 0; i < 4; i++) {
+        for (int dist = 1; dist <= 3; dist++) {
+            int nx = x + directions[i][0] * dist;
+            int ny = y + directions[i][1] * dist;
+            if (isValidPosition(nx, ny) {
+                if (isBodyPosition(nx, ny, false)) {
+                    body_penalty -= 3.0f / dist; // Reduced from 5.0
+                    break;
+                }
             }
-            nx += directions[i][0];
-            ny += directions[i][1];
-            dist++;
         }
     }
     
-    // Small time penalty
-    float time_penalty = -0.1f;
+    // Small positive living reward
+    float time_reward = 0.05f;
     
-    return dist_reward + body_penalty + time_penalty;
+    return dist_reward + body_penalty + time_reward;
 }
 
 void resetGame() {
