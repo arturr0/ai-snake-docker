@@ -45,10 +45,10 @@ struct GameState {
 struct QLearning {
     vector<vector<float>> table;
     float learning_rate = 0.1f;
-    float discount_factor = 0.9f;
+    float discount_factor = 0.95f;  // Increased from 0.9
     float exploration_rate = 1.0f;
     int episodes = 0;
-    const float exploration_decay = 0.9999f; // Slower decay
+    const float exploration_decay = 0.9995f;
 };
 
 // Performance tracking
@@ -219,72 +219,54 @@ bool isBodyPosition(int x, int y, bool include_head = true) {
 }
 
 void initQTable() {
-    // Larger state space with better body representation
-    q_learning.table.resize(WIDTH * HEIGHT * 4096);  
+    // More compact state representation
+    q_learning.table.resize(WIDTH * HEIGHT * 128);
     for (auto& row : q_learning.table) {
-        row.assign(4, 0.0f);
-        // Small random initial values
-        for (float& val : row) {
-            val = (rand() % 100) / 1000.0f - 0.05f;
-        }
+        row.assign(4, 0.1f);  // Start with small positive values
     }
 }
 
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
     
-    // Food direction (8 possible directions)
+    // Food direction (4-way)
     int food_dir = 0;
-    int dx = game.food_x - x;
-    int dy = game.food_y - y;
+    if (game.food_x > x) food_dir = 1;
+    else if (game.food_x < x) food_dir = 2;
+    if (game.food_y > y) food_dir |= 4;
+    else if (game.food_y < y) food_dir |= 8;
     
-    if (dx > 0) food_dir = 1;       // Food is below
-    else if (dx < 0) food_dir = 2;  // Food is above
+    // Immediate danger (4-way)
+    int danger = 0;
+    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y, false)) danger |= 1;
+    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y, false)) danger |= 2;
+    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
+    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
     
-    if (dy > 0) food_dir |= 4;      // Food is right
-    else if (dy < 0) food_dir |= 8; // Food is left
-
-    // Body proximity in 8 directions (up, down, left, right, and diagonals)
-    int body_proximity = 0;
-    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
-    
-    for (int i = 0; i < 8; i++) {
-        int nx = x + directions[i][0];
-        int ny = y + directions[i][1];
-        int dist = 1;
-        while (isValidPosition(nx, ny)) {
-            if (isBodyPosition(nx, ny, false)) {
-                body_proximity |= (1 << i); // Mark direction as having body
-                body_proximity |= (min(dist, 3) << (8 + i*2)); // Add distance info
+    // Body proximity (4-way within 3 cells)
+    int proximity = 0;
+    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
+    for (int i = 0; i < 4; i++) {
+        for (int dist = 1; dist <= 3; dist++) {
+            int nx = x + directions[i][0] * dist;
+            int ny = y + directions[i][1] * dist;
+            if (isValidPosition(nx, ny) && isBodyPosition(nx, ny, false)) {
+                proximity |= (1 << (i + 4 * (dist - 1)));
                 break;
             }
-            nx += directions[i][0];
-            ny += directions[i][1];
-            dist++;
         }
     }
-
-    // Wall proximity
-    int wall_proximity = 0;
-    if (x <= 1) wall_proximity |= 1;       // Near top wall
-    if (x >= HEIGHT-2) wall_proximity |= 2; // Near bottom wall
-    if (y <= 1) wall_proximity |= 4;       // Near left wall
-    if (y >= WIDTH-2) wall_proximity |= 8; // Near right wall
-
-    // Combine all state components
-    return (y * WIDTH + x) * 4096 + dir * 1024 + food_dir * 64 + body_proximity * 4 + wall_proximity;
+    
+    return (y * WIDTH + x) * 128 + dir * 32 + food_dir * 4 + danger + proximity;
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    // Random action during exploration phase
     if (static_cast<float>(rand()) / RAND_MAX < q_learning.exploration_rate) {
         return rand() % 4;
     }
 
-    // Get Q-values for current state
     int state = getStateIndex(x, y, current_dir);
     if (state >= 0 && state < q_learning.table.size()) {
-        // Find action with maximum Q-value
         return distance(q_learning.table[state].begin(),
                       max_element(q_learning.table[state].begin(), q_learning.table[state].end()));
     }
@@ -294,7 +276,6 @@ int chooseAction(int x, int y, int current_dir) {
 void updateQTable(int old_state, int action, int new_state, float reward) {
     if (old_state >= 0 && old_state < q_learning.table.size() && 
         new_state >= 0 && new_state < q_learning.table.size()) {
-        // Q-learning update rule
         float best_future = *max_element(q_learning.table[new_state].begin(), 
                                        q_learning.table[new_state].end());
         q_learning.table[old_state][action] = 
@@ -304,44 +285,35 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    // Large negative reward for crashing
-    if (crashed) return -100.0f;
+    if (crashed) return -50.0f;  // Reduced from -100 to prevent overly negative Q-values
     
-    // Positive reward for getting food
-    if (got_food) return 30.0f; // Reduced from 50 to balance with penalties
+    if (got_food) return 20.0f;   // Reduced from 50 but still strongly positive
     
-    // Distance-based reward for moving toward food
-    float prev_dist = sqrtf((prev_x-game.food_x)*(prev_x-game.food_x) + 
-                     (prev_y-game.food_y)*(prev_y-game.food_y));
-    float new_dist = sqrtf((x-game.food_x)*(x-game.food_x) + 
-                    (y-game.food_y)*(y-game.food_y));
-    float dist_reward = (prev_dist - new_dist) * 3.0f; // Reduced from 5
+    // Distance reward (Manhattan distance)
+    float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y);
+    float new_dist = abs(x-game.food_x) + abs(y-game.food_y);
+    float dist_reward = (prev_dist - new_dist) * 1.0f; // Reduced from 2.0
     
-    // Progressive body collision penalty
+    // Body proximity penalty
     float body_penalty = 0.0f;
-    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
-    
-    for (int i = 0; i < 8; i++) {
-        int nx = x + directions[i][0];
-        int ny = y + directions[i][1];
-        int dist = 1;
-        while (isValidPosition(nx, ny) && dist <= 3) {
-            if (isBodyPosition(nx, ny, false)) {
-                // Stronger penalty for closer body parts
-                body_penalty -= 10.0f / dist;
-                break;
+    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
+    for (int i = 0; i < 4; i++) {
+        for (int dist = 1; dist <= 3; dist++) {
+            int nx = x + directions[i][0] * dist;
+            int ny = y + directions[i][1] * dist;
+            if (isValidPosition(nx, ny)) {
+                if (isBodyPosition(nx, ny, false)) {
+                    body_penalty -= 3.0f / dist; // Reduced from 5.0
+                    break;
+                }
             }
-            nx += directions[i][0];
-            ny += directions[i][1];
-            dist++;
         }
     }
     
-    // Small time penalty to encourage efficiency
-    float time_penalty = -0.1f;
+    // Small positive living reward
+    float time_reward = 0.05f;
     
-    // Combined reward
-    return dist_reward + body_penalty + time_penalty;
+    return dist_reward + body_penalty + time_reward;
 }
 
 void resetGame() {
@@ -386,10 +358,10 @@ bool moveSnake(int& direction) {
         
         int new_x = game.head_x, new_y = game.head_y;
         switch (action) {
-            case 0: new_x--; break; // Up
-            case 1: new_x++; break; // Down
-            case 2: new_y--; break; // Left
-            case 3: new_y++; break; // Right
+            case 0: new_x--; break;
+            case 1: new_x++; break;
+            case 2: new_y--; break;
+            case 3: new_y++; break;
         }
 
         bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y, false);
@@ -404,7 +376,6 @@ bool moveSnake(int& direction) {
         if (valid) {
             direction = action;
         } else {
-            // Find safe alternative actions
             vector<int> safe_actions;
             for (int i = 0; i < 4; i++) {
                 int test_x = game.head_x, test_y = game.head_y;
@@ -421,12 +392,11 @@ bool moveSnake(int& direction) {
             if (!safe_actions.empty()) {
                 direction = safe_actions[rand() % safe_actions.size()];
             } else {
-                return true; // No safe moves left
+                return true;
             }
         }
     }
 
-    // Move in current direction
     switch (direction) {
         case 0: game.head_x--; break;
         case 1: game.head_x++; break;
@@ -436,12 +406,10 @@ bool moveSnake(int& direction) {
 
     game.steps_since_last_food++;
 
-    // Check for collisions
     if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y, false)) {
         return true;
     }
 
-    // Update body positions
     game.trail.insert(game.trail.begin(), {game.head_x, game.head_y});
     if (game.trail.size() > game.length + 2) {
         game.trail.resize(game.length + 2);
@@ -452,7 +420,6 @@ bool moveSnake(int& direction) {
         game.body.resize(game.length);
     }
 
-    // Check for food
     if (game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
         game.lifetime_score++;
@@ -461,7 +428,6 @@ bool moveSnake(int& direction) {
         spawnFood();
     }
 
-    // Timeout if stuck
     if (game.steps_since_last_food > 200) {
         return true;
     }
@@ -539,7 +505,6 @@ void drawGame() {
 
 void logPerformance() {
     if (q_learning.episodes % LOG_INTERVAL == 0) {
-        // Calculate average Q-value
         float total_q = 0;
         int count = 0;
         for (const auto& row : q_learning.table) {
@@ -583,7 +548,6 @@ void mainLoop() {
 
     if (q_learning.episodes < MAX_TRAINING_EPISODES) {
         q_learning.episodes++;
-        // Slower exploration decay
         q_learning.exploration_rate = max(MIN_EXPLORATION, 
                                          q_learning.exploration_rate * q_learning.exploration_decay);
         logPerformance();
