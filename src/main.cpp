@@ -17,7 +17,6 @@ EM_JS(void, export_functions, (), {
 
 using namespace std;
 
-// Game constants
 const int WIDTH = 20;
 const int HEIGHT = 20;
 const int CELL_SIZE = 20;
@@ -26,22 +25,21 @@ const int LOG_INTERVAL = 100;
 const int MAX_TRAINING_EPISODES = 5000000;
 const float MIN_EXPLORATION = 0.0001f;
 
-// Game state
 struct GameState {
     int head_x = HEIGHT / 2;
     int head_y = WIDTH / 2;
     int score = 0;
     int length = 2;
-    int food_x = 0, food_y = 0;
+    int food_x = -1, food_y = -1;
     bool crashed = false;
     int speed = 200;
     vector<vector<int>> body;
     vector<vector<int>> trail;
     int lifetime_score = 0;
     int steps_since_last_food = 0;
+    bool has_food = false;
 };
 
-// Q-learning parameters
 struct QLearning {
     vector<vector<float>> table;
     float learning_rate = 0.1f;
@@ -51,7 +49,6 @@ struct QLearning {
     const float exploration_decay = 0.9995f;
 };
 
-// Performance tracking
 struct Performance {
     vector<int> scores;
     vector<float> avg_q_values;
@@ -59,13 +56,11 @@ struct Performance {
     vector<float> avg_rewards;
 };
 
-// SDL resources
 struct SDLResources {
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
 };
 
-// Global game objects
 GameState game;
 QLearning q_learning;
 Performance performance;
@@ -303,7 +298,7 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     return dist_reward + body_penalty + time_reward;
 }
 
-void resetGame(bool keep_food) {
+void resetGame() {
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
@@ -312,25 +307,19 @@ void resetGame(bool keep_food) {
     game.body = {{game.head_x, game.head_y}};
     game.trail = {{game.head_x, game.head_y}};
     game.crashed = false;
-    
-    if (!keep_food) {
-        auto all_positions = generateAllPositions();
-        auto free_positions = getFreePositions(game.trail, all_positions);
-        if (!free_positions.empty()) {
-            int k = rand() % free_positions.size();
-            game.food_x = free_positions[k][0];
-            game.food_y = free_positions[k][1];
-        }
-    }
+    game.has_food = false;
 }
 
 void spawnFood() {
+    if (game.has_food) return; // Don't spawn if food already exists
+
     auto all_positions = generateAllPositions();
     auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty() && !moveSnake(direction)) {
+    if (!free_positions.empty()) {
         int k = rand() % free_positions.size();
         game.food_x = free_positions[k][0];
         game.food_y = free_positions[k][1];
+        game.has_food = true;
     }
 }
 
@@ -354,7 +343,7 @@ bool moveSnake(int& direction) {
         }
 
         bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y, false);
-        bool got_food = (new_x == game.food_x && new_y == game.food_y);
+        bool got_food = game.has_food && (new_x == game.food_x && new_y == game.food_y);
         bool crashed = !valid;
 
         float reward = calculateReward(prev_x, prev_y, new_x, new_y, got_food, crashed);
@@ -411,12 +400,13 @@ bool moveSnake(int& direction) {
         game.body.resize(game.length);
     }
 
-    if (game.head_x == game.food_x && game.head_y == game.food_y) {
+    if (game.has_food && game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
         game.lifetime_score++;
         game.length++;
         game.steps_since_last_food = 0;
-        spawnFood();
+        game.has_food = false; // Mark food as eaten
+        spawnFood(); // Spawn new food only when eaten
     }
 
     if (game.steps_since_last_food > 200) {
@@ -468,9 +458,11 @@ void drawGame() {
     SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
     SDL_RenderDrawRect(sdl.renderer, &border);
 
-    SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255);
-    SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-    SDL_RenderFillRect(sdl.renderer, &food);
+    if (game.has_food) {
+        SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255);
+        SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+        SDL_RenderFillRect(sdl.renderer, &food);
+    }
 
     for (size_t i = 0; i < game.body.size(); i++) {
         const auto& seg = game.body[i];
@@ -524,7 +516,8 @@ void mainLoop() {
     if (reset_timer > 0) {
         reset_timer--;
         if (reset_timer == 0) {
-            resetGame(false);
+            resetGame();
+            spawnFood(); // Spawn initial food on reset
         }
         return;
     }
@@ -540,7 +533,6 @@ void mainLoop() {
     }
 
     if (crashed) {
-        resetGame(true);  // Keep current food position
         reset_timer = 5;
     }
 }
@@ -559,17 +551,10 @@ int main() {
     initChartJS();
     #endif
 
-    auto all_positions = generateAllPositions();
-    game.body = {{HEIGHT/2, WIDTH/2}};
-    game.trail = {{HEIGHT/2, WIDTH/2}};
-    auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty() && !moveSnake(direction)) {
-        game.food_x = free_positions[0][0];
-        game.food_y = free_positions[0][1];
-    }
-
     initQTable();
     initSDL();
+    resetGame();
+    spawnFood(); // Initial food spawn
 
     #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
@@ -582,7 +567,8 @@ int main() {
         if (reset_timer > 0) {
             reset_timer--;
             if (reset_timer == 0) {
-                resetGame(true);
+                resetGame();
+                spawnFood();
             }
             SDL_Delay(game.speed);
             continue;
@@ -600,7 +586,6 @@ int main() {
         }
 
         if (crashed) {
-            resetGame(true);  // Keep same food position
             reset_timer = 5;
         }
 
