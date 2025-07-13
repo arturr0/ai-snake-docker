@@ -4,23 +4,26 @@ FROM emscripten/emsdk:3.1.45 as builder
 WORKDIR /app
 COPY . .
 
-# Install SDL2 for Emscripten
-RUN embuilder.py build sdl2
+# Install dependencies and build SDL2
+RUN apt-get update && \
+    apt-get install -y cmake ninja-build && \
+    rm -rf /var/lib/apt/lists/* && \
+    embuilder.py build sdl2
 
 # Set up build environment
 RUN mkdir -p build && \
     cd build && \
-    emcmake cmake .. \
+    emcmake cmake .. -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    emmake make -j$(nproc) VERBOSE=1
+    cmake --build . --verbose
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
 
-COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
 COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
-COPY --from=builder /app/shell_minimal.html /usr/share/nginx/html/index.html
+COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/index.html
+COPY shell.html /usr/share/nginx/html/
 
 EXPOSE 80
