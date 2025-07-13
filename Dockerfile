@@ -9,26 +9,19 @@ RUN apt-get update && \
     apt-get install -y cmake ninja-build && \
     rm -rf /var/lib/apt/lists/*
 
+# Create build directory
+RUN mkdir -p build && mkdir -p dist
+
 # Build
-RUN mkdir -p build && \
-    cd build && \
-    emcmake cmake .. -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    cmake --build . --verbose && \
-    cp aisnake_web.* /app/dist/
+WORKDIR /app/build
+RUN emcmake cmake .. -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build . --verbose
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.25-alpine
 
-# Create working directory
-WORKDIR /usr/share/nginx/html
-
-# Copy built files from builder
-COPY --from=builder /app/dist/ .
-COPY shell.html .
-
-# Configure nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy built files
+COPY --from=builder /app/dist/ /usr/share/nginx/html/
 
 EXPOSE 80
