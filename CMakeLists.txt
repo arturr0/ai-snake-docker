@@ -10,28 +10,25 @@ file(GLOB SOURCE_FILES "src/*.cpp")
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
+    # Compile options
     add_compile_options(
         -O3
         -sUSE_SDL=2
         -sALLOW_MEMORY_GROWTH=1
-        -sNO_EXIT_RUNTIME=1
-        -sENVIRONMENT=web
-        -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate','_getStats']
-        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']
     )
     
+    # Linker flags - properly formatted with spaces and quotes
     set(CMAKE_EXE_LINKER_FLAGS 
-        "${CMAKE_EXE_LINKER_FLAGS} 
-        -sUSE_SDL=2 
-        -sUSE_SDL_IMAGE=2
-        -sSDL2_IMAGE_FORMATS='[\"png\"]'
-        --preload-file assets
-        --shell-file ${CMAKE_SOURCE_DIR}/shell.html
-        -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate','_getStats']
-        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']
-        -sMODULARIZE=1
-        -sALLOW_MEMORY_GROWTH=1")
-    else()
+        "${CMAKE_EXE_LINKER_FLAGS} "
+        "-sUSE_SDL=2 "
+        "--shell-file ${CMAKE_SOURCE_DIR}/shell.html "
+        "-sEXPORTED_FUNCTIONS=['_main','_getExplorationRate','_getStats'] "
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'] "
+        "-sMODULARIZE=1 "
+        "-sALLOW_MEMORY_GROWTH=1"
+    )
+    
+else()
     find_package(SDL2 REQUIRED)
     include_directories(${SDL2_INCLUDE_DIRS})
 endif()
