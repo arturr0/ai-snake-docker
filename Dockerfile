@@ -4,11 +4,10 @@ FROM emscripten/emsdk:3.1.45 as builder
 WORKDIR /app
 COPY . .
 
-# Install dependencies and build SDL2
+# Install dependencies
 RUN apt-get update && \
     apt-get install -y cmake ninja-build && \
-    rm -rf /var/lib/apt/lists/* && \
-    embuilder.py build sdl2
+    rm -rf /var/lib/apt/lists/*
 
 # Set up build environment
 RUN mkdir -p build && \
@@ -16,7 +15,7 @@ RUN mkdir -p build && \
     emcmake cmake .. -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    cmake --build . --verbose
+    emmake make
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
