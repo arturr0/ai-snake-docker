@@ -9,10 +9,10 @@ RUN apt-get update && \
     apt-get install -y cmake ninja-build && \
     rm -rf /var/lib/apt/lists/*
 
-# Verify files are copied correctly
-RUN ls -la && ls -la src/ && test -f shell.html
+# Verify files
+RUN ls -la && test -f shell.html && test -f src/main.cpp
 
-# Build with verbose output
+# Build
 RUN mkdir -p build && \
     cd build && \
     emcmake cmake .. -G Ninja \
