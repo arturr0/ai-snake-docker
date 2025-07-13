@@ -327,7 +327,7 @@ void resetGame(bool keep_food) {
 void spawnFood() {
     auto all_positions = generateAllPositions();
     auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty()) {
+    if (!free_positions.empty() && !crashed) {
         int k = rand() % free_positions.size();
         game.food_x = free_positions[k][0];
         game.food_y = free_positions[k][1];
@@ -563,7 +563,7 @@ int main() {
     game.body = {{HEIGHT/2, WIDTH/2}};
     game.trail = {{HEIGHT/2, WIDTH/2}};
     auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty()) {
+    if (!free_positions.empty() && !crashed) {
         game.food_x = free_positions[0][0];
         game.food_y = free_positions[0][1];
     }
