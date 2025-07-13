@@ -10,24 +10,18 @@ file(GLOB SOURCE_FILES "src/*.cpp")
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     
-    # Compile options
-    add_compile_options(
-        -O3
-        -sUSE_SDL=2
-        -sALLOW_MEMORY_GROWTH=1
-    )
+    # These flags go to both compiler and linker
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -sUSE_SDL=2 -sALLOW_MEMORY_GROWTH=1")
     
-    # Linker flags - properly formatted with spaces and quotes
+    # Linker-specific flags
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} "
-        "-sUSE_SDL=2 "
         "--shell-file ${CMAKE_SOURCE_DIR}/shell.html "
         "-sEXPORTED_FUNCTIONS=['_main','_getExplorationRate','_getStats'] "
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'] "
         "-sMODULARIZE=1 "
         "-sALLOW_MEMORY_GROWTH=1"
     )
-    
 else()
     find_package(SDL2 REQUIRED)
     include_directories(${SDL2_INCLUDE_DIRS})
