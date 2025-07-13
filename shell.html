@@ -2,87 +2,41 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Snake Training</title>
+    <title>AI Snake</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #222;
-            color: white;
+        body { margin: 0; padding: 20px; background-color: #222; color: white; }
+        #status { position: fixed; top: 10px; left: 10px; z-index: 1000; }
+        #stats { position: fixed; top: 30px; left: 10px; z-index: 1000; }
+        #chart-container { 
+            width: 800px; 
+            margin: 20px auto; 
+            padding: 20px; 
+            background-color: #333; 
         }
-        #container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        #status {
-            text-align: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            background: #333;
-            border-radius: 5px;
-        }
-        #game-canvas {
-            display: block;
-            margin: 0 auto;
-            background: black;
-        }
-        #loading {
-            text-align: center;
-            margin: 20px;
-            font-size: 18px;
-        }
-        .hidden {
-            display: none;
-        }
+        canvas { display: block; margin: 0 auto; background-color: #000; }
     </style>
 </head>
 <body>
-    <div id="container">
-        <div id="loading">Loading WebAssembly application...</div>
-        <div id="status" class="hidden">Loading game...</div>
-        <canvas id="game-canvas" width="400" height="400" class="hidden"></canvas>
+    <div id="status"></div>
+    <div id="stats"></div>
+    <div id="chart-container">
+        <canvas id="scoreChart"></canvas>
+        <canvas id="lifetimeChart"></canvas>
+        <canvas id="fruitsChart"></canvas>
+        <canvas id="collisionChart"></canvas>
     </div>
-
-    <!-- This script block must come before the SCRIPT placeholder -->
+    <canvas id="canvas"></canvas>
     <script>
-    // This will be merged with Emscripten's generated Module object
-    var Module = Module || {};
-    Module.canvas = (function() {
-        var canvas = document.getElementById('game-canvas');
-        canvas.addEventListener('webglcontextlost', function(e) {
-            alert('WebGL context lost. Please reload the page.');
-            e.preventDefault();
-        }, false);
-        return canvas;
-    })();
-    Module.onRuntimeInitialized = function() {
-        // Hide loading indicator
-        var loadingElement = document.getElementById('loading');
-        if (loadingElement) loadingElement.classList.add('hidden');
-        
-        // Show game elements
-        var statusElement = document.getElementById('status');
-        var canvasElement = document.getElementById('game-canvas');
-        
-        if (statusElement) {
-            statusElement.classList.remove('hidden');
-            statusElement.textContent = 'Game loaded - training started';
-        }
-        
-        if (canvasElement) {
-            canvasElement.classList.remove('hidden');
-        }
-    };
-    Module.printErr = function(text) {
-        console.error(text);
-        var statusElement = document.getElementById('status');
-        if (statusElement) statusElement.textContent = 'Error: ' + text;
+    var Module = {
+        canvas: (function() {
+            var canvas = document.getElementById('canvas');
+            canvas.width = 400;
+            canvas.height = 400;
+            return canvas;
+        })()
     };
     </script>
-
-    <!-- This MUST be present for Emscripten -->
-    {{{ SCRIPT }}}
+    <script src="aisnake_web.js"></script>
 </body>
 </html>
