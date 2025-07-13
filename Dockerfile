@@ -15,14 +15,20 @@ RUN mkdir -p build && \
     emcmake cmake .. -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    cmake --build . --verbose
+    cmake --build . --verbose && \
+    cp aisnake_web.* /app/dist/
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.25-alpine
 
-COPY --from=builder /app/build/aisnake_web.js /usr/share/nginx/html/
-COPY --from=builder /app/build/aisnake_web.wasm /usr/share/nginx/html/
-COPY --from=builder /app/build/aisnake_web.html /usr/share/nginx/html/index.html
-COPY shell.html /usr/share/nginx/html/
+# Create working directory
+WORKDIR /usr/share/nginx/html
+
+# Copy built files from builder
+COPY --from=builder /app/dist/ .
+COPY shell.html .
+
+# Configure nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
