@@ -303,7 +303,7 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     return dist_reward + body_penalty + time_reward;
 }
 
-void resetGame(bool keep_food = false) {
+void resetGame(bool keep_food) {
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
