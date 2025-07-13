@@ -524,17 +524,27 @@ bool moveSnake(int& direction) {
     return false;
 }
 
-void initSDL() {
+    void initSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         cerr << "SDL_Init Error: " << SDL_GetError() << endl;
         exit(1);
     }
 
+    #ifdef __EMSCRIPTEN__
+    EM_ASM(
+        // Bind SDL to the game canvas
+        Module.canvas = document.getElementById('canvas');
+        Module.canvas.width = 400;
+        Module.canvas.height = 400;
+        console.log("Canvas initialized for SDL");
+    );
+    #endif
+
     sdl.window = SDL_CreateWindow("AI Snake",
                                 SDL_WINDOWPOS_CENTERED,
                                 SDL_WINDOWPOS_CENTERED,
-                                WIDTH * CELL_SIZE,
-                                HEIGHT * CELL_SIZE,
+                                WIDTH * CELL_SIZE,  // 400
+                                HEIGHT * CELL_SIZE, // 400
                                 SDL_WINDOW_SHOWN);
     if (!sdl.window) {
         cerr << "SDL_CreateWindow Error: " << SDL_GetError() << endl;
@@ -552,9 +562,11 @@ void initSDL() {
         exit(1);
     }
 
-    if (SDL_SetRenderDrawBlendMode(sdl.renderer, SDL_BLENDMODE_BLEND) != 0) {
-        cerr << "SDL_SetRenderDrawBlendMode Error: " << SDL_GetError() << endl;
-    }
+    // Debug: Draw a test pattern
+    SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255); // Red
+    SDL_Rect rect = {50, 50, 100, 100};
+    SDL_RenderFillRect(sdl.renderer, &rect);
+    SDL_RenderPresent(sdl.renderer);
 }
 
 void drawGame() {
