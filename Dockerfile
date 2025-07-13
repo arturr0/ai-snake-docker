@@ -15,7 +15,7 @@ RUN mkdir -p build && \
     emcmake cmake .. -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake && \
-    emmake make
+    ninja
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.23-alpine
