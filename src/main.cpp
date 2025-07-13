@@ -94,6 +94,14 @@ vector<vector<int>> generateAllPositions() {
     return positions;
 }
 
+vector<vector<int>> getFreePositions(const vector<vector<int>>& occupied, const vector<vector<int>>& all) {
+    vector<vector<int>> free = all;
+    for (const auto& pos : occupied) {
+        free.erase(remove(free.begin(), free.end(), pos), free.end());
+    }
+    return free;
+}
+
 void spawnFood() {
     auto all_positions = generateAllPositions();
     auto free_positions = getFreePositions(game.trail, all_positions);
@@ -291,25 +299,6 @@ extern "C" {
                 " | Best: " + to_string(game.longest_life_fruits);
         return stats.c_str();
     }
-}
-
-vector<vector<int>> generateAllPositions() {
-    vector<vector<int>> positions(WIDTH * HEIGHT, vector<int>(2));
-    int idx = 0;
-    for (int i = 0; i < HEIGHT; ++i) {
-        for (int j = 0; j < WIDTH; ++j, ++idx) {
-            positions[idx] = {i, j};
-        }
-    }
-    return positions;
-}
-
-vector<vector<int>> getFreePositions(const vector<vector<int>>& occupied, const vector<vector<int>>& all) {
-    vector<vector<int>> free = all;
-    for (const auto& pos : occupied) {
-        free.erase(remove(free.begin(), free.end(), pos), free.end());
-    }
-    return free;
 }
 
 bool isValidPosition(int x, int y) {
