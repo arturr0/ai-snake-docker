@@ -557,7 +557,7 @@ void mainLoop() {
         logPerformance();
     }
 
-       if (crashed) {
+    if (crashed) {
         resetGame(true);  // Keep current food position
         reset_timer = 5;
     }
