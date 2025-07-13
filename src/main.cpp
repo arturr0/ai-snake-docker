@@ -45,7 +45,7 @@ struct GameState {
 struct QLearning {
     vector<vector<float>> table;
     float learning_rate = 0.1f;
-    float discount_factor = 0.95f;  // Increased from 0.9
+    float discount_factor = 0.95f;
     float exploration_rate = 1.0f;
     int episodes = 0;
     const float exploration_decay = 0.9995f;
@@ -73,7 +73,6 @@ SDLResources sdl;
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
-    // Wait for both DOM and Module to be ready
     function initializeCharts() {
         if (typeof Chart === 'undefined' || !Module.canvas) {
             setTimeout(initializeCharts, 100);
@@ -91,7 +90,6 @@ EM_JS(void, initChartJS, (), {
             document.body.insertBefore(container, Module.canvas.nextSibling);
         }
 
-        // Create canvas elements
         ['scoreChart', 'qValueChart', 'lifetimeChart'].forEach(id => {
             if (!document.getElementById(id)) {
                 var canvas = document.createElement('canvas');
@@ -101,7 +99,6 @@ EM_JS(void, initChartJS, (), {
             }
         });
 
-        // Initialize charts with empty data
         window.scoreChart = new Chart(document.getElementById('scoreChart'), {
             type: 'line',
             data: { labels: [], datasets: [{
@@ -139,7 +136,6 @@ EM_JS(void, initChartJS, (), {
         });
     }
 
-    // Start initialization
     if (document.readyState === 'complete') {
         initializeCharts();
     } else {
@@ -149,14 +145,12 @@ EM_JS(void, initChartJS, (), {
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
     try {
-        // Update status text
         var statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.innerHTML = 
                 `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(4)}`;
         }
         
-        // Update charts if they exist
         if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
             function updateChart(chart, value) {
                 chart.data.labels.push(episode);
@@ -219,31 +213,27 @@ bool isBodyPosition(int x, int y, bool include_head = true) {
 }
 
 void initQTable() {
-    // More compact state representation
     q_learning.table.resize(WIDTH * HEIGHT * 128);
     for (auto& row : q_learning.table) {
-        row.assign(4, 0.1f);  // Start with small positive values
+        row.assign(4, 0.1f);
     }
 }
 
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
     
-    // Food direction (4-way)
     int food_dir = 0;
     if (game.food_x > x) food_dir = 1;
     else if (game.food_x < x) food_dir = 2;
     if (game.food_y > y) food_dir |= 4;
     else if (game.food_y < y) food_dir |= 8;
     
-    // Immediate danger (4-way)
     int danger = 0;
     if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y, false)) danger |= 1;
     if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y, false)) danger |= 2;
     if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
     if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
     
-    // Body proximity (4-way within 3 cells)
     int proximity = 0;
     const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
     for (int i = 0; i < 4; i++) {
@@ -285,16 +275,14 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -100.0f;  // Reduced from -100 to prevent overly negative Q-values
+    if (crashed) return -100.0f;
     
-    if (got_food) return 100.0f;   // Reduced from 50 but still strongly positive
+    if (got_food) return 100.0f;
     
-    // Distance reward (Manhattan distance)
     float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y);
     float new_dist = abs(x-game.food_x) + abs(y-game.food_y);
-    float dist_reward = (prev_dist - new_dist) * 1.0f; // Reduced from 2.0
+    float dist_reward = (prev_dist - new_dist) * 1.0f;
     
-    // Body proximity penalty
     float body_penalty = 0.0f;
     const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
     for (int i = 0; i < 4; i++) {
@@ -303,21 +291,19 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
             int ny = y + directions[i][1] * dist;
             if (isValidPosition(nx, ny)) {
                 if (isBodyPosition(nx, ny, false)) {
-                    body_penalty -= 3.0f / dist; // Reduced from 5.0
+                    body_penalty -= 3.0f / dist;
                     break;
                 }
             }
         }
     }
     
-    // Small positive living reward
     float time_reward = 0.05f;
     
     return dist_reward + body_penalty + time_reward;
 }
 
 void resetGame(bool keep_food = false) {
-    // Reset snake position and body
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
@@ -327,7 +313,6 @@ void resetGame(bool keep_food = false) {
     game.trail = {{game.head_x, game.head_y}};
     game.crashed = false;
     
-    // Only generate new food if explicitly requested
     if (!keep_food) {
         auto all_positions = generateAllPositions();
         auto free_positions = getFreePositions(game.trail, all_positions);
@@ -396,6 +381,7 @@ bool moveSnake(int& direction) {
             if (!safe_actions.empty()) {
                 direction = safe_actions[rand() % safe_actions.size()];
             } else {
+                game.crashed = true;
                 return true;
             }
         }
@@ -411,6 +397,7 @@ bool moveSnake(int& direction) {
     game.steps_since_last_food++;
 
     if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y, false)) {
+        game.crashed = true;
         return true;
     }
 
@@ -433,6 +420,7 @@ bool moveSnake(int& direction) {
     }
 
     if (game.steps_since_last_food > 200) {
+        game.crashed = true;
         return true;
     }
 
@@ -476,26 +464,20 @@ void drawGame() {
     SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
     SDL_RenderClear(sdl.renderer);
 
-    // Draw border
     SDL_SetRenderDrawColor(sdl.renderer, 50, 50, 50, 255);
     SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
     SDL_RenderDrawRect(sdl.renderer, &border);
 
-    // Draw food
     SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255);
     SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &food);
 
-    // Draw body with gradient
     for (size_t i = 0; i < game.body.size(); i++) {
         const auto& seg = game.body[i];
         if (seg.size() == 2) {
-            // Head is brighter green
             if (i == 0) {
                 SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
-            } 
-            // Body gets darker toward tail
-            else {
+            } else {
                 int intensity = 100 + (155 * i / game.body.size());
                 SDL_SetRenderDrawColor(sdl.renderer, 0, intensity, 0, 255);
             }
