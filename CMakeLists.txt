@@ -23,8 +23,15 @@ if(EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} 
         -sUSE_SDL=2 
-        --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
-else()
+        -sUSE_SDL_IMAGE=2
+        -sSDL2_IMAGE_FORMATS='[\"png\"]'
+        --preload-file assets
+        --shell-file ${CMAKE_SOURCE_DIR}/shell.html
+        -sEXPORTED_FUNCTIONS=['_main','_getExplorationRate','_getStats']
+        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']
+        -sMODULARIZE=1
+        -sALLOW_MEMORY_GROWTH=1")
+    else()
     find_package(SDL2 REQUIRED)
     include_directories(${SDL2_INCLUDE_DIRS})
 endif()
