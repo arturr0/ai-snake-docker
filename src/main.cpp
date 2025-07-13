@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <queue>
 #include <cmath>
-#include <SDL2/SDL.h>  
+#include <SDL2/SDL.h>  /
+
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
 
@@ -14,7 +16,6 @@ EM_JS(void, export_functions, (), {
     Module['getStats'] = Module.cwrap('getStats', 'string', []);
 });
 #endif
-
 using namespace std;
 
 // Game constants
