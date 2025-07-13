@@ -45,7 +45,7 @@ struct GameState {
 struct QLearning {
     vector<vector<float>> table;
     float learning_rate = 0.1f;
-    float discount_factor = 0.95f;  // Increased from 0.9
+    float discount_factor = 0.95f;
     float exploration_rate = 1.0f;
     int episodes = 0;
     const float exploration_decay = 0.9995f;
@@ -73,7 +73,6 @@ SDLResources sdl;
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
-    // Wait for both DOM and Module to be ready
     function initializeCharts() {
         if (typeof Chart === 'undefined' || !Module.canvas) {
             setTimeout(initializeCharts, 100);
@@ -91,7 +90,6 @@ EM_JS(void, initChartJS, (), {
             document.body.insertBefore(container, Module.canvas.nextSibling);
         }
 
-        // Create canvas elements
         ['scoreChart', 'qValueChart', 'lifetimeChart'].forEach(id => {
             if (!document.getElementById(id)) {
                 var canvas = document.createElement('canvas');
@@ -101,7 +99,6 @@ EM_JS(void, initChartJS, (), {
             }
         });
 
-        // Initialize charts with empty data
         window.scoreChart = new Chart(document.getElementById('scoreChart'), {
             type: 'line',
             data: { labels: [], datasets: [{
@@ -139,7 +136,6 @@ EM_JS(void, initChartJS, (), {
         });
     }
 
-    // Start initialization
     if (document.readyState === 'complete') {
         initializeCharts();
     } else {
@@ -149,14 +145,12 @@ EM_JS(void, initChartJS, (), {
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
     try {
-        // Update status text
         var statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.innerHTML = 
                 `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(4)}`;
         }
         
-        // Update charts if they exist
         if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
             function updateChart(chart, value) {
                 chart.data.labels.push(episode);
@@ -219,45 +213,54 @@ bool isBodyPosition(int x, int y, bool include_head = true) {
 }
 
 void initQTable() {
-    // More compact state representation
-    q_learning.table.resize(WIDTH * HEIGHT * 128);
+    // Expanded state space for better collision awareness
+    q_learning.table.resize(WIDTH * HEIGHT * 1024);
     for (auto& row : q_learning.table) {
-        row.assign(4, 0.1f);  // Start with small positive values
+        row.assign(4, 0.1f);
     }
 }
 
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
     
-    // Food direction (4-way)
+    // Food direction (8-way)
     int food_dir = 0;
-    if (game.food_x > x) food_dir = 1;
-    else if (game.food_x < x) food_dir = 2;
-    if (game.food_y > y) food_dir |= 4;
-    else if (game.food_y < y) food_dir |= 8;
+    int dx = game.food_x - x;
+    int dy = game.food_y - y;
     
-    // Immediate danger (4-way)
-    int danger = 0;
-    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y, false)) danger |= 1;
-    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y, false)) danger |= 2;
-    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
-    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
+    if (dx > 0) food_dir = 1;
+    else if (dx < 0) food_dir = 2;
+    if (dy > 0) food_dir |= 4;
+    else if (dy < 0) food_dir |= 8;
+
+    // Body proximity in 8 directions (up, down, left, right, and diagonals)
+    int body_proximity = 0;
+    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
     
-    // Body proximity (4-way within 3 cells)
-    int proximity = 0;
-    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
-    for (int i = 0; i < 4; i++) {
-        for (int dist = 1; dist <= 3; dist++) {
-            int nx = x + directions[i][0] * dist;
-            int ny = y + directions[i][1] * dist;
-            if (isValidPosition(nx, ny) && isBodyPosition(nx, ny, false)) {
-                proximity |= (1 << (i + 4 * (dist - 1)));
+    for (int i = 0; i < 8; i++) {
+        int nx = x + directions[i][0];
+        int ny = y + directions[i][1];
+        int dist = 1;
+        while (isValidPosition(nx, ny) && dist <= 3) {
+            if (isBodyPosition(nx, ny, false)) {
+                body_proximity |= (1 << i);
+                body_proximity |= (min(dist, 3) << (8 + i*2));
                 break;
             }
+            nx += directions[i][0];
+            ny += directions[i][1];
+            dist++;
         }
     }
-    
-    return (y * WIDTH + x) * 128 + dir * 32 + food_dir * 4 + danger + proximity;
+
+    // Wall proximity
+    int wall_proximity = 0;
+    if (x <= 1) wall_proximity |= 1;
+    if (x >= HEIGHT-2) wall_proximity |= 2;
+    if (y <= 1) wall_proximity |= 4;
+    if (y >= WIDTH-2) wall_proximity |= 8;
+
+    return (y * WIDTH + x) * 1024 + dir * 256 + food_dir * 16 + body_proximity * 2 + wall_proximity;
 }
 
 int chooseAction(int x, int y, int current_dir) {
@@ -285,35 +288,40 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -50.0f;  // Reduced from -100 to prevent overly negative Q-values
+    if (crashed) return -100.0f;
     
-    if (got_food) return 20.0f;   // Reduced from 50 but still strongly positive
+    if (got_food) return 30.0f;
     
-    // Distance reward (Manhattan distance)
-    float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y);
-    float new_dist = abs(x-game.food_x) + abs(y-game.food_y);
-    float dist_reward = (prev_dist - new_dist) * 1.0f; // Reduced from 2.0
+    // Distance-based reward (Euclidean)
+    float prev_dist = sqrtf((prev_x-game.food_x)*(prev_x-game.food_x) + 
+                     (prev_y-game.food_y)*(prev_y-game.food_y));
+    float new_dist = sqrtf((x-game.food_x)*(x-game.food_x) + 
+                    (y-game.food_y)*(y-game.food_y));
+    float dist_reward = (prev_dist - new_dist) * 3.0f;
     
-    // Body proximity penalty
+    // Progressive body collision penalty
     float body_penalty = 0.0f;
-    const int directions[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
-    for (int i = 0; i < 4; i++) {
-        for (int dist = 1; dist <= 3; dist++) {
-            int nx = x + directions[i][0] * dist;
-            int ny = y + directions[i][1] * dist;
-            if (isValidPosition(nx, ny)) {
-                if (isBodyPosition(nx, ny, false)) {
-                    body_penalty -= 3.0f / dist; // Reduced from 5.0
-                    break;
-                }
+    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
+    
+    for (int i = 0; i < 8; i++) {
+        int nx = x + directions[i][0];
+        int ny = y + directions[i][1];
+        int dist = 1;
+        while (isValidPosition(nx, ny) && dist <= 3) {
+            if (isBodyPosition(nx, ny, false)) {
+                body_penalty -= 10.0f / dist;
+                break;
             }
+            nx += directions[i][0];
+            ny += directions[i][1];
+            dist++;
         }
     }
     
-    // Small positive living reward
-    float time_reward = 0.05f;
+    // Time penalty to encourage efficiency
+    float time_penalty = -0.1f;
     
-    return dist_reward + body_penalty + time_reward;
+    return dist_reward + body_penalty + time_penalty;
 }
 
 void resetGame() {
@@ -486,12 +494,9 @@ void drawGame() {
     for (size_t i = 0; i < game.body.size(); i++) {
         const auto& seg = game.body[i];
         if (seg.size() == 2) {
-            // Head is brighter green
             if (i == 0) {
                 SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
-            } 
-            // Body gets darker toward tail
-            else {
+            } else {
                 int intensity = 100 + (155 * i / game.body.size());
                 SDL_SetRenderDrawColor(sdl.renderer, 0, intensity, 0, 255);
             }
