@@ -48,7 +48,7 @@ struct QLearning {
     float discount_factor = 0.9f;
     float exploration_rate = 1.0f;
     int episodes = 0;
-    const float exploration_decay = 0.9995f;
+    const float exploration_decay = 0.9999f; // Slower decay
 };
 
 // Performance tracking
@@ -73,7 +73,7 @@ SDLResources sdl;
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
-    // Wait for DOM and Module to be ready
+    // Wait for both DOM and Module to be ready
     function initializeCharts() {
         if (typeof Chart === 'undefined' || !Module.canvas) {
             setTimeout(initializeCharts, 100);
@@ -88,101 +88,60 @@ EM_JS(void, initChartJS, (), {
             container.style.margin = '20px auto';
             container.style.padding = '20px';
             container.style.backgroundColor = '#333';
-            document.body.insertBefore(container, Module.canvas.parentNode);
+            document.body.insertBefore(container, Module.canvas.nextSibling);
         }
 
-        // Create canvas elements if they don't exist
-        if (!document.getElementById('scoreChart')) {
-            var scoreCanvas = document.createElement('canvas');
-            scoreCanvas.id = 'scoreChart';
-            scoreCanvas.style.marginBottom = '20px';
-            container.appendChild(scoreCanvas);
-        }
+        // Create canvas elements
+        ['scoreChart', 'qValueChart', 'lifetimeChart'].forEach(id => {
+            if (!document.getElementById(id)) {
+                var canvas = document.createElement('canvas');
+                canvas.id = id;
+                canvas.style.marginBottom = '20px';
+                container.appendChild(canvas);
+            }
+        });
 
-        if (!document.getElementById('qValueChart')) {
-            var qValueCanvas = document.createElement('canvas');
-            qValueCanvas.id = 'qValueChart';
-            qValueCanvas.style.marginBottom = '20px';
-            container.appendChild(qValueCanvas);
-        }
-
-        if (!document.getElementById('lifetimeChart')) {
-            var lifetimeCanvas = document.createElement('canvas');
-            lifetimeCanvas.id = 'lifetimeChart';
-            container.appendChild(lifetimeCanvas);
-        }
-
-        // Initialize charts
+        // Initialize charts with empty data
         window.scoreChart = new Chart(document.getElementById('scoreChart'), {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Episode Score',
-                    data: [],
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
+            data: { labels: [], datasets: [{
+                label: 'Episode Score',
+                data: [],
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1,
+                fill: false
+            }]},
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
         });
 
         window.qValueChart = new Chart(document.getElementById('qValueChart'), {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Average Q Value',
-                    data: [],
-                    borderColor: 'rgba(153, 102, 255, 1)',
-                    borderWidth: 1,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
+            data: { labels: [], datasets: [{
+                label: 'Average Q Value',
+                data: [],
+                borderColor: 'rgba(153, 102, 255, 1)',
+                borderWidth: 1,
+                fill: false
+            }]},
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
         });
 
         window.lifetimeChart = new Chart(document.getElementById('lifetimeChart'), {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Lifetime Score',
-                    data: [],
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
+            data: { labels: [], datasets: [{
+                label: 'Lifetime Score',
+                data: [],
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1,
+                fill: false
+            }]},
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
         });
     }
 
     // Start initialization
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        setTimeout(initializeCharts, 1);
+    if (document.readyState === 'complete') {
+        initializeCharts();
     } else {
         document.addEventListener('DOMContentLoaded', initializeCharts);
     }
@@ -190,39 +149,28 @@ EM_JS(void, initChartJS, (), {
 
 EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
     try {
+        // Update status text
         var statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.innerHTML = 
-                `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
+                `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(4)}`;
         }
         
+        // Update charts if they exist
         if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
-            // Update score chart
-            window.scoreChart.data.labels.push(episode);
-            window.scoreChart.data.datasets[0].data.push(score);
-            if (window.scoreChart.data.labels.length > 1000) {
-                window.scoreChart.data.labels.shift();
-                window.scoreChart.data.datasets[0].data.shift();
+            function updateChart(chart, value) {
+                chart.data.labels.push(episode);
+                chart.data.datasets[0].data.push(value);
+                if (chart.data.labels.length > 500) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                chart.update();
             }
-            window.scoreChart.update();
             
-            // Update Q value chart
-            window.qValueChart.data.labels.push(episode);
-            window.qValueChart.data.datasets[0].data.push(avg_q);
-            if (window.qValueChart.data.labels.length > 1000) {
-                window.qValueChart.data.labels.shift();
-                window.qValueChart.data.datasets[0].data.shift();
-            }
-            window.qValueChart.update();
-            
-            // Update lifetime score chart
-            window.lifetimeChart.data.labels.push(episode);
-            window.lifetimeChart.data.datasets[0].data.push(lifetime_score);
-            if (window.lifetimeChart.data.labels.length > 1000) {
-                window.lifetimeChart.data.labels.shift();
-                window.lifetimeChart.data.datasets[0].data.shift();
-            }
-            window.lifetimeChart.update();
+            updateChart(window.scoreChart, score);
+            updateChart(window.qValueChart, avg_q);
+            updateChart(window.lifetimeChart, lifetime_score);
         }
     } catch(e) {
         console.error('Chart update error:', e);
@@ -271,11 +219,13 @@ bool isBodyPosition(int x, int y, bool include_head = true) {
 }
 
 void initQTable() {
-    q_learning.table.resize(WIDTH * HEIGHT * 2048);  // Larger state space
+    // Larger state space with better body representation
+    q_learning.table.resize(WIDTH * HEIGHT * 4096);  
     for (auto& row : q_learning.table) {
         row.assign(4, 0.0f);
+        // Small random initial values
         for (float& val : row) {
-            val = (rand() % 100) / 1000.0f - 0.01f;
+            val = (rand() % 100) / 1000.0f - 0.05f;
         }
     }
 }
@@ -283,50 +233,58 @@ void initQTable() {
 int getStateIndex(int x, int y, int dir) {
     if (!isValidPosition(x, y)) return 0;
     
-    // Food direction (more detailed)
+    // Food direction (8 possible directions)
     int food_dir = 0;
     int dx = game.food_x - x;
     int dy = game.food_y - y;
-    if (dx > 0) food_dir = 1;
-    else if (dx < 0) food_dir = 2;
-    if (dy > 0) food_dir |= 4;
-    else if (dy < 0) food_dir |= 8;
     
-    // Enhanced danger detection
-    int danger = 0;
-    // Immediate danger (adjacent cells)
-    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y, false)) danger |= 1;
-    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y, false)) danger |= 2;
-    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
-    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
+    if (dx > 0) food_dir = 1;       // Food is below
+    else if (dx < 0) food_dir = 2;  // Food is above
     
-    // Look ahead danger (2 cells away)
-    if (!isValidPosition(x-2, y) || isBodyPosition(x-2, y, false)) danger |= 16;
-    if (!isValidPosition(x+2, y) || isBodyPosition(x+2, y, false)) danger |= 32;
-    if (!isValidPosition(x, y-2) || isBodyPosition(x, y-2, false)) danger |= 64;
-    if (!isValidPosition(x, y+2) || isBodyPosition(x, y+2, false)) danger |= 128;
+    if (dy > 0) food_dir |= 4;      // Food is right
+    else if (dy < 0) food_dir |= 8; // Food is left
+
+    // Body proximity in 8 directions (up, down, left, right, and diagonals)
+    int body_proximity = 0;
+    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
     
-    // Body proximity (within 3 cells)
-    int proximity = 0;
-    for (int i = -3; i <= 3; i++) {
-        for (int j = -3; j <= 3; j++) {
-            if (i == 0 && j == 0) continue;
-            if (isBodyPosition(x+i, y+j, false)) {
-                proximity++;
+    for (int i = 0; i < 8; i++) {
+        int nx = x + directions[i][0];
+        int ny = y + directions[i][1];
+        int dist = 1;
+        while (isValidPosition(nx, ny)) {
+            if (isBodyPosition(nx, ny, false)) {
+                body_proximity |= (1 << i); // Mark direction as having body
+                body_proximity |= (min(dist, 3) << (8 + i*2)); // Add distance info
+                break;
             }
+            nx += directions[i][0];
+            ny += directions[i][1];
+            dist++;
         }
     }
-    
-    return (y * WIDTH + x) * 2048 + dir * 512 + food_dir * 32 + danger * 2 + min(proximity, 3);
+
+    // Wall proximity
+    int wall_proximity = 0;
+    if (x <= 1) wall_proximity |= 1;       // Near top wall
+    if (x >= HEIGHT-2) wall_proximity |= 2; // Near bottom wall
+    if (y <= 1) wall_proximity |= 4;       // Near left wall
+    if (y >= WIDTH-2) wall_proximity |= 8; // Near right wall
+
+    // Combine all state components
+    return (y * WIDTH + x) * 4096 + dir * 1024 + food_dir * 64 + body_proximity * 4 + wall_proximity;
 }
 
 int chooseAction(int x, int y, int current_dir) {
+    // Random action during exploration phase
     if (static_cast<float>(rand()) / RAND_MAX < q_learning.exploration_rate) {
         return rand() % 4;
     }
 
+    // Get Q-values for current state
     int state = getStateIndex(x, y, current_dir);
     if (state >= 0 && state < q_learning.table.size()) {
+        // Find action with maximum Q-value
         return distance(q_learning.table[state].begin(),
                       max_element(q_learning.table[state].begin(), q_learning.table[state].end()));
     }
@@ -336,6 +294,7 @@ int chooseAction(int x, int y, int current_dir) {
 void updateQTable(int old_state, int action, int new_state, float reward) {
     if (old_state >= 0 && old_state < q_learning.table.size() && 
         new_state >= 0 && new_state < q_learning.table.size()) {
+        // Q-learning update rule
         float best_future = *max_element(q_learning.table[new_state].begin(), 
                                        q_learning.table[new_state].end());
         q_learning.table[old_state][action] = 
@@ -345,30 +304,43 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
+    // Large negative reward for crashing
     if (crashed) return -100.0f;
-    if (got_food) return 50.0f;
     
+    // Positive reward for getting food
+    if (got_food) return 30.0f; // Reduced from 50 to balance with penalties
+    
+    // Distance-based reward for moving toward food
     float prev_dist = sqrtf((prev_x-game.food_x)*(prev_x-game.food_x) + 
                      (prev_y-game.food_y)*(prev_y-game.food_y));
     float new_dist = sqrtf((x-game.food_x)*(x-game.food_x) + 
                     (y-game.food_y)*(y-game.food_y));
-    float dist_reward = (prev_dist - new_dist) * 5.0f;
+    float dist_reward = (prev_dist - new_dist) * 3.0f; // Reduced from 5
     
-    // Stronger body penalty with distance scaling
+    // Progressive body collision penalty
     float body_penalty = 0.0f;
-    for (int dx = -3; dx <= 3; dx++) {
-        for (int dy = -3; dy <= 3; dy++) {
-            if (dx == 0 && dy == 0) continue;
-            if (isBodyPosition(x + dx, y + dy, false)) {
-                float dist = sqrtf(dx*dx + dy*dy);
-                body_penalty -= 5.0f / dist;  // Stronger penalty for closer body parts
+    const int directions[8][2] = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
+    
+    for (int i = 0; i < 8; i++) {
+        int nx = x + directions[i][0];
+        int ny = y + directions[i][1];
+        int dist = 1;
+        while (isValidPosition(nx, ny) && dist <= 3) {
+            if (isBodyPosition(nx, ny, false)) {
+                // Stronger penalty for closer body parts
+                body_penalty -= 10.0f / dist;
+                break;
             }
+            nx += directions[i][0];
+            ny += directions[i][1];
+            dist++;
         }
     }
     
-    // Time penalty to prevent looping
-    float time_penalty = -0.2f;
+    // Small time penalty to encourage efficiency
+    float time_penalty = -0.1f;
     
+    // Combined reward
     return dist_reward + body_penalty + time_penalty;
 }
 
@@ -414,10 +386,10 @@ bool moveSnake(int& direction) {
         
         int new_x = game.head_x, new_y = game.head_y;
         switch (action) {
-            case 0: new_x--; break;
-            case 1: new_x++; break;
-            case 2: new_y--; break;
-            case 3: new_y++; break;
+            case 0: new_x--; break; // Up
+            case 1: new_x++; break; // Down
+            case 2: new_y--; break; // Left
+            case 3: new_y++; break; // Right
         }
 
         bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y, false);
@@ -432,6 +404,7 @@ bool moveSnake(int& direction) {
         if (valid) {
             direction = action;
         } else {
+            // Find safe alternative actions
             vector<int> safe_actions;
             for (int i = 0; i < 4; i++) {
                 int test_x = game.head_x, test_y = game.head_y;
@@ -448,11 +421,12 @@ bool moveSnake(int& direction) {
             if (!safe_actions.empty()) {
                 direction = safe_actions[rand() % safe_actions.size()];
             } else {
-                return true;
+                return true; // No safe moves left
             }
         }
     }
 
+    // Move in current direction
     switch (direction) {
         case 0: game.head_x--; break;
         case 1: game.head_x++; break;
@@ -467,6 +441,7 @@ bool moveSnake(int& direction) {
         return true;
     }
 
+    // Update body positions
     game.trail.insert(game.trail.begin(), {game.head_x, game.head_y});
     if (game.trail.size() > game.length + 2) {
         game.trail.resize(game.length + 2);
@@ -477,6 +452,7 @@ bool moveSnake(int& direction) {
         game.body.resize(game.length);
     }
 
+    // Check for food
     if (game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
         game.lifetime_score++;
@@ -530,35 +506,40 @@ void drawGame() {
     SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
     SDL_RenderClear(sdl.renderer);
 
+    // Draw border
     SDL_SetRenderDrawColor(sdl.renderer, 50, 50, 50, 255);
     SDL_Rect border = {0, 0, WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE};
     SDL_RenderDrawRect(sdl.renderer, &border);
 
+    // Draw food
     SDL_SetRenderDrawColor(sdl.renderer, 255, 0, 0, 255);
     SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &food);
 
-    // Draw body segments with gradient
-    for (size_t i = 1; i < game.body.size(); i++) {
+    // Draw body with gradient
+    for (size_t i = 0; i < game.body.size(); i++) {
         const auto& seg = game.body[i];
         if (seg.size() == 2) {
-            int intensity = 100 + (155 * i / game.body.size());
-            SDL_SetRenderDrawColor(sdl.renderer, 0, intensity, 0, 255);
+            // Head is brighter green
+            if (i == 0) {
+                SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
+            } 
+            // Body gets darker toward tail
+            else {
+                int intensity = 100 + (155 * i / game.body.size());
+                SDL_SetRenderDrawColor(sdl.renderer, 0, intensity, 0, 255);
+            }
             SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
             SDL_RenderFillRect(sdl.renderer, &body);
         }
     }
-
-    // Draw head
-    SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
-    SDL_Rect head = {game.head_y * CELL_SIZE, game.head_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-    SDL_RenderFillRect(sdl.renderer, &head);
 
     SDL_RenderPresent(sdl.renderer);
 }
 
 void logPerformance() {
     if (q_learning.episodes % LOG_INTERVAL == 0) {
+        // Calculate average Q-value
         float total_q = 0;
         int count = 0;
         for (const auto& row : q_learning.table) {
@@ -602,6 +583,7 @@ void mainLoop() {
 
     if (q_learning.episodes < MAX_TRAINING_EPISODES) {
         q_learning.episodes++;
+        // Slower exploration decay
         q_learning.exploration_rate = max(MIN_EXPLORATION, 
                                          q_learning.exploration_rate * q_learning.exploration_decay);
         logPerformance();
