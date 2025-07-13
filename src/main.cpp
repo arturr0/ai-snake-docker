@@ -316,7 +316,8 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     return dist_reward + body_penalty + time_reward;
 }
 
-void resetGame(bool keep_food = false) {  // Add parameter
+void resetGame(bool keep_food = false) {
+    // Reset snake position and body
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
@@ -326,7 +327,8 @@ void resetGame(bool keep_food = false) {  // Add parameter
     game.trail = {{game.head_x, game.head_y}};
     game.crashed = false;
     
-    if (!keep_food) {  // Only generate new food when needed
+    // Only generate new food if explicitly requested
+    if (!keep_food) {
         auto all_positions = generateAllPositions();
         auto free_positions = getFreePositions(game.trail, all_positions);
         if (!free_positions.empty()) {
@@ -555,8 +557,8 @@ void mainLoop() {
         logPerformance();
     }
 
-    if (crashed) {
-        resetGame(true);  // Keep same food position
+       if (crashed) {
+        resetGame(true);  // Keep current food position
         reset_timer = 5;
     }
 }
