@@ -34,7 +34,10 @@
             canvas.width = 400;
             canvas.height = 400;
             return canvas;
-        })()
+        })(),
+        onRuntimeInitialized: function() {
+            console.log("WASM initialized");
+        }
     };
     </script>
     <script src="aisnake_web.js"></script>
