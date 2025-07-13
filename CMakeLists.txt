@@ -23,7 +23,7 @@ if(EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS 
         "${CMAKE_EXE_LINKER_FLAGS} 
         -sUSE_SDL=2 
-        --shell-file ${CMAKE_SOURCE_DIR}/shell_minimal.html")
+        --shell-file ${CMAKE_SOURCE_DIR}/shell.html")
 else()
     find_package(SDL2 REQUIRED)
     include_directories(${SDL2_INCLUDE_DIRS})
