@@ -16,12 +16,14 @@ RUN mkdir -p build && mkdir -p dist
 WORKDIR /app/build
 RUN emcmake cmake .. -G Ninja \
     -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build . --verbose
+    cmake --build . --verbose && \
+    cp aisnake_web.* /app/dist/
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.25-alpine
 
 # Copy built files
 COPY --from=builder /app/dist/ /usr/share/nginx/html/
+COPY --from=builder /app/shell.html /usr/share/nginx/html/
 
 EXPOSE 80
