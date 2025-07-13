@@ -582,7 +582,7 @@ int main() {
         if (reset_timer > 0) {
             reset_timer--;
             if (reset_timer == 0) {
-                resetGame();
+                resetGame(true);
             }
             SDL_Delay(game.speed);
             continue;
