@@ -12,6 +12,7 @@
 
 EM_JS(void, export_functions, (), {
     Module['getExplorationRate'] = Module.cwrap('getExplorationRate', 'number', []);
+    Module['getStats'] = Module.cwrap('getStats', 'string', []);
 });
 #endif
 
@@ -25,8 +26,9 @@ const int AI_UPDATE_INTERVAL = 5;
 const int LOG_INTERVAL = 100;
 const int MAX_TRAINING_EPISODES = 5000000;
 const float MIN_EXPLORATION = 0.01f;
+const int MAX_MOVES_WITHOUT_FOOD = 100;
 
-// Game state
+// Enhanced GameState with more statistics
 struct GameState {
     int head_x = HEIGHT / 2;
     int head_y = WIDTH / 2;
@@ -37,7 +39,15 @@ struct GameState {
     int speed = 200;
     vector<vector<int>> body;
     vector<vector<int>> trail;
-    int lifetime_score = 0;  // Track total score across resets
+    int lifetime_score = 0;
+    int fruits_per_life = 0;
+    int total_fruits = 0;
+    int lives = 0;
+    int moves_since_last_fruit = 0;
+    float avg_fruits_per_life = 0;
+    int longest_life_fruits = 0;
+    int recent_fruits[10] = {0};
+    int recent_index = 0;
 };
 
 // Q-learning parameters
@@ -56,12 +66,15 @@ struct Performance {
     vector<float> avg_q_values;
     vector<int> lengths;
     vector<float> avg_rewards;
+    vector<float> fruits_per_life_history;
+    vector<int> collision_counts;
 };
 
 // SDL resources
 struct SDLResources {
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
+    SDL_Surface* screen = nullptr;
 };
 
 // Global game objects
@@ -72,29 +85,35 @@ SDLResources sdl;
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
-    document.addEventListener('DOMContentLoaded', function() {
+    if (typeof window.chartsInitialized === 'undefined') {
+        console.log("Initializing charts...");
+        
         var container = document.getElementById('chart-container');
         if (!container) {
             container = document.createElement('div');
             container.id = 'chart-container';
             container.style.width = '800px';
-            container.style.margin = '20px auto';
+            container.style.margin = '0 auto';
             container.style.padding = '20px';
-            container.style.backgroundColor = '#333';
-            document.body.appendChild(container);
+            container.style.backgroundColor = '#222';
+            document.body.insertBefore(container, document.body.firstChild);
         }
 
         var scoreCanvas = document.createElement('canvas');
         scoreCanvas.id = 'scoreChart';
         container.appendChild(scoreCanvas);
 
-        var qValueCanvas = document.createElement('canvas');
-        qValueCanvas.id = 'qValueChart';
-        container.appendChild(qValueCanvas);
-
         var lifetimeCanvas = document.createElement('canvas');
         lifetimeCanvas.id = 'lifetimeChart';
         container.appendChild(lifetimeCanvas);
+
+        var fruitsCanvas = document.createElement('canvas');
+        fruitsCanvas.id = 'fruitsChart';
+        container.appendChild(fruitsCanvas);
+
+        var collisionCanvas = document.createElement('canvas');
+        collisionCanvas.id = 'collisionChart';
+        container.appendChild(collisionCanvas);
 
         window.scoreChart = new Chart(scoreCanvas, {
             type: 'line',
@@ -111,31 +130,7 @@ EM_JS(void, initChartJS, (), {
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-
-        window.qValueChart = new Chart(qValueCanvas, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Average Q Value',
-                    data: [],
-                    borderColor: 'rgba(153, 102, 255, 1)',
-                    borderWidth: 1,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
+                    y: { beginAtZero: true }
                 }
             }
         });
@@ -155,50 +150,105 @@ EM_JS(void, initChartJS, (), {
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: true
-                    }
+                    y: { beginAtZero: true }
                 }
             }
         });
-    });
+
+        window.fruitsChart = new Chart(fruitsCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Fruits/Life (Avg 10)',
+                    data: [],
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        window.collisionChart = new Chart(collisionCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Collision Rate',
+                    data: [],
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        window.chartsInitialized = true;
+    }
 });
 
-EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
+EM_JS(void, updateCharts, (int episode, int score, int lifetime, int fruits_per_life, int collision_rate), {
     try {
         var statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.innerHTML = 
-                `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
+                `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime} | Fruits/Life: ${fruits_per_life}`;
         }
         
-        if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
-            // Update score chart
+        var statsElement = document.getElementById('stats');
+        if (statsElement) {
+            statsElement.innerHTML = 
+                `Total Fruits: ${Module.ccall('getStats', 'string', [])}`;
+        }
+        
+        if (window.scoreChart && window.lifetimeChart && window.fruitsChart && window.collisionChart) {
+            // Score chart
             window.scoreChart.data.labels.push(episode);
             window.scoreChart.data.datasets[0].data.push(score);
-            if (window.scoreChart.data.labels.length > 1000) {
+            if (window.scoreChart.data.labels.length > 500) {
                 window.scoreChart.data.labels.shift();
                 window.scoreChart.data.datasets[0].data.shift();
             }
             window.scoreChart.update();
             
-            // Update Q value chart
-            window.qValueChart.data.labels.push(episode);
-            window.qValueChart.data.datasets[0].data.push(avg_q);
-            if (window.qValueChart.data.labels.length > 1000) {
-                window.qValueChart.data.labels.shift();
-                window.qValueChart.data.datasets[0].data.shift();
-            }
-            window.qValueChart.update();
-            
-            // Update lifetime score chart
+            // Lifetime chart
             window.lifetimeChart.data.labels.push(episode);
-            window.lifetimeChart.data.datasets[0].data.push(lifetime_score);
-            if (window.lifetimeChart.data.labels.length > 1000) {
+            window.lifetimeChart.data.datasets[0].data.push(lifetime);
+            if (window.lifetimeChart.data.labels.length > 500) {
                 window.lifetimeChart.data.labels.shift();
                 window.lifetimeChart.data.datasets[0].data.shift();
             }
             window.lifetimeChart.update();
+            
+            // Fruits per life chart
+            window.fruitsChart.data.labels.push(episode);
+            window.fruitsChart.data.datasets[0].data.push(fruits_per_life);
+            if (window.fruitsChart.data.labels.length > 500) {
+                window.fruitsChart.data.labels.shift();
+                window.fruitsChart.data.datasets[0].data.shift();
+            }
+            window.fruitsChart.update();
+            
+            // Collision rate chart
+            window.collisionChart.data.labels.push(episode);
+            window.collisionChart.data.datasets[0].data.push(collision_rate);
+            if (window.collisionChart.data.labels.length > 500) {
+                window.collisionChart.data.labels.shift();
+                window.collisionChart.data.datasets[0].data.shift();
+            }
+            window.collisionChart.update();
         }
     } catch(e) {
         console.error('Chart update error:', e);
@@ -210,6 +260,15 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     float getExplorationRate() {
         return q_learning.exploration_rate;
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    const char* getStats() {
+        static string stats;
+        stats = "Total: " + to_string(game.total_fruits) + 
+                " | Avg: " + to_string(game.avg_fruits_per_life) + 
+                " | Best: " + to_string(game.longest_life_fruits);
+        return stats.c_str();
     }
 }
 
@@ -299,44 +358,70 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -100.0f;
-    if (got_food) return 50.0f;
-    
-    float prev_dist = sqrtf((prev_x-game.food_x)*(prev_x-game.food_x) + 
-                     (prev_y-game.food_y)*(prev_y-game.food_y));
-    float new_dist = sqrtf((x-game.food_x)*(x-game.food_x) + 
-                    (y-game.food_y)*(y-game.food_y));
-    float dist_reward = (prev_dist - new_dist) * 5.0f;
-    
-    // Additional penalty for getting too close to own body
-    float body_penalty = 0.0f;
-    for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-            if (dx == 0 && dy == 0) continue;
-            if (isBodyPosition(x + dx, y + dy, false)) {
-                body_penalty -= 2.0f;
-            }
-        }
+    if (crashed) {
+        // Strong penalty for crashing, scaled by snake length
+        return -200.0f + (game.length * -5.0f);
     }
     
-    return dist_reward + body_penalty + 0.1f;
+    if (got_food) {
+        // Reward for getting food, scaled by snake length
+        return 100.0f + (game.length * 1.0f);
+    }
+    
+    float reward = 0;
+    
+    // Distance to food reward
+    float prev_dist = abs(prev_x-game.food_x) + abs(prev_y-game.food_y);
+    float new_dist = abs(x-game.food_x) + abs(y-game.food_y);
+    reward += (prev_dist - new_dist) * 5.0f;
+    
+    // Body avoidance (more sophisticated)
+    for (int i = 1; i < game.body.size(); i++) {
+        float dist = sqrt(pow(x-game.body[i][0], 2) + pow(y-game.body[i][1], 2);
+        if (dist < 3) reward -= (3-dist) * 10.0f;
+    }
+    
+    // Small reward for surviving
+    reward += 0.2f;
+    
+    // Penalty for not eating for a while
+    if (game.moves_since_last_fruit > 50) {
+        reward -= (game.moves_since_last_fruit - 50) * 0.5f;
+    }
+    
+    return reward;
 }
 
 void resetGame() {
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
+    game.score = 0;
+    game.moves_since_last_fruit = 0;
     game.body = {{game.head_x, game.head_y}};
     game.trail = {{game.head_x, game.head_y}};
     game.crashed = false;
+    game.lives++;
     
-    auto all_positions = generateAllPositions();
-    auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty()) {
-        int k = rand() % free_positions.size();
-        game.food_x = free_positions[k][0];
-        game.food_y = free_positions[k][1];
+    // Update fruits statistics
+    if (game.fruits_per_life > game.longest_life_fruits) {
+        game.longest_life_fruits = game.fruits_per_life;
     }
+    
+    // Update recent fruits array
+    game.recent_fruits[game.recent_index] = game.fruits_per_life;
+    game.recent_index = (game.recent_index + 1) % 10;
+    
+    // Update average fruits per life
+    if (game.lives > 1) {
+        game.avg_fruits_per_life = (game.avg_fruits_per_life * (game.lives - 1) + game.fruits_per_life) / game.lives;
+    } else {
+        game.avg_fruits_per_life = game.fruits_per_life;
+    }
+    
+    game.fruits_per_life = 0;
+    
+    spawnFood();
 }
 
 void spawnFood() {
@@ -352,6 +437,8 @@ void spawnFood() {
 bool moveSnake(int& direction) {
     static int frame = 0;
     frame++;
+    
+    game.moves_since_last_fruit++;
 
     int prev_x = game.head_x;
     int prev_y = game.head_y;
@@ -370,7 +457,7 @@ bool moveSnake(int& direction) {
 
         bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y, false);
         bool got_food = (new_x == game.food_x && new_y == game.food_y);
-        bool crashed = !valid;
+        bool crashed = !valid || (game.moves_since_last_fruit > MAX_MOVES_WITHOUT_FOOD);
 
         float reward = calculateReward(prev_x, prev_y, new_x, new_y, got_food, crashed);
         int old_state = getStateIndex(prev_x, prev_y, prev_dir);
@@ -408,8 +495,9 @@ bool moveSnake(int& direction) {
         case 3: game.head_y++; break;
     }
 
-    // Check for self-collision (excluding head)
-    if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y, false)) {
+    if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y, false) || 
+        game.moves_since_last_fruit > MAX_MOVES_WITHOUT_FOOD) {
+        performance.collision_counts.push_back(1);
         return true;
     }
 
@@ -426,7 +514,10 @@ bool moveSnake(int& direction) {
     if (game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
         game.lifetime_score++;
+        game.total_fruits++;
+        game.fruits_per_life++;
         game.length++;
+        game.moves_since_last_fruit = 0;
         spawnFood();
     }
 
@@ -478,7 +569,6 @@ void drawGame() {
     SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &food);
 
-    // Draw body segments
     SDL_SetRenderDrawColor(sdl.renderer, 0, 180, 0, 255);
     for (size_t i = 1; i < game.body.size(); i++) {
         const auto& seg = game.body[i];
@@ -488,7 +578,6 @@ void drawGame() {
         }
     }
 
-    // Draw head
     SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
     SDL_Rect head = {game.head_y * CELL_SIZE, game.head_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &head);
@@ -511,15 +600,25 @@ void logPerformance() {
         performance.scores.push_back(game.score);
         performance.avg_q_values.push_back(avg_q);
         performance.lengths.push_back(game.length);
+        performance.fruits_per_life_history.push_back(game.fruits_per_life);
+
+        // Calculate collision rate
+        float collision_rate = 0;
+        if (!performance.collision_counts.empty()) {
+            collision_rate = performance.collision_counts.back() * 100.0f / LOG_INTERVAL;
+            performance.collision_counts.clear();
+        }
 
         #ifdef __EMSCRIPTEN__
-        updateCharts(q_learning.episodes, game.score, avg_q, q_learning.exploration_rate, game.lifetime_score);
+        updateCharts(q_learning.episodes, game.score, game.lifetime_score, game.fruits_per_life, collision_rate);
         #else
         cout << "Episode: " << q_learning.episodes 
              << " | Score: " << game.score 
              << " | Lifetime: " << game.lifetime_score
+             << " | Fruits/Life: " << game.fruits_per_life
              << " | Avg Q: " << avg_q
-             << " | Exploration: " << q_learning.exploration_rate << endl;
+             << " | Exploration: " << q_learning.exploration_rate 
+             << " | Collision Rate: " << collision_rate << "%" << endl;
         #endif
     }
 }
@@ -563,6 +662,19 @@ int main() {
     #ifdef __EMSCRIPTEN__
     export_functions();
     initChartJS();
+    
+    // Create HTML status display
+    EM_ASM(
+        var statusDiv = document.createElement('div');
+        statusDiv.id = 'status';
+        statusDiv.style.cssText = 'position:fixed;top:10px;left:10px;color:white;font-family:Arial;z-index:1000;';
+        document.body.appendChild(statusDiv);
+        
+        var statsDiv = document.createElement('div');
+        statsDiv.id = 'stats';
+        statsDiv.style.cssText = 'position:fixed;top:30px;left:10px;color:white;font-family:Arial;z-index:1000;';
+        document.body.appendChild(statsDiv);
+    );
     #endif
 
     auto all_positions = generateAllPositions();
