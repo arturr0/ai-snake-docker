@@ -316,7 +316,7 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     return dist_reward + body_penalty + time_reward;
 }
 
-void resetGame() {
+void resetGame(bool keep_food = false) {  // Add parameter
     game.head_x = HEIGHT / 2;
     game.head_y = WIDTH / 2;
     game.length = 2;
@@ -326,12 +326,14 @@ void resetGame() {
     game.trail = {{game.head_x, game.head_y}};
     game.crashed = false;
     
-    auto all_positions = generateAllPositions();
-    auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty()) {
-        int k = rand() % free_positions.size();
-        game.food_x = free_positions[k][0];
-        game.food_y = free_positions[k][1];
+    if (!keep_food) {  // Only generate new food when needed
+        auto all_positions = generateAllPositions();
+        auto free_positions = getFreePositions(game.trail, all_positions);
+        if (!free_positions.empty()) {
+            int k = rand() % free_positions.size();
+            game.food_x = free_positions[k][0];
+            game.food_y = free_positions[k][1];
+        }
     }
 }
 
@@ -554,6 +556,7 @@ void mainLoop() {
     }
 
     if (crashed) {
+        resetGame(true);  // Keep same food position
         reset_timer = 5;
     }
 }
@@ -613,6 +616,7 @@ int main() {
         }
 
         if (crashed) {
+            resetGame(true);  // Keep same food position
             reset_timer = 5;
         }
 
