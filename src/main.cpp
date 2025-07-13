@@ -288,7 +288,7 @@ void updateQTable(int old_state, int action, int new_state, float reward) {
 }
 
 float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool crashed) {
-    if (crashed) return -100.0f;
+    if (crashed) return -65.0f;
     
     if (got_food) return 30.0f;
     
