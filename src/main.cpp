@@ -83,6 +83,17 @@ QLearning q_learning;
 Performance performance;
 SDLResources sdl;
 
+vector<vector<int>> generateAllPositions() {
+    vector<vector<int>> positions(WIDTH * HEIGHT, vector<int>(2));
+    int idx = 0;
+    for (int i = 0; i < HEIGHT; ++i) {
+        for (int j = 0; j < WIDTH; ++j, ++idx) {
+            positions[idx] = {i, j};
+        }
+    }
+    return positions;
+}
+
 void spawnFood() {
     auto all_positions = generateAllPositions();
     auto free_positions = getFreePositions(game.trail, all_positions);
@@ -432,16 +443,6 @@ void resetGame() {
     game.fruits_per_life = 0;
     
     spawnFood();
-}
-
-void spawnFood() {
-    auto all_positions = generateAllPositions();
-    auto free_positions = getFreePositions(game.trail, all_positions);
-    if (!free_positions.empty()) {
-        int k = rand() % free_positions.size();
-        game.food_x = free_positions[k][0];
-        game.food_y = free_positions[k][1];
-    }
 }
 
 bool moveSnake(int& direction) {
