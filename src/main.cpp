@@ -334,12 +334,12 @@ int getStateIndex(int x, int y, int dir) {
 }
 
 int chooseAction(int x, int y, int current_dir) {
-    if (static_cast<float>(rand()) / RAND_MAX < q_learning.exploration_rate) {
+    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < q_learning.exploration_rate) {
         return rand() % 4;
     }
 
     int state = getStateIndex(x, y, current_dir);
-    if (state >= 0 && state < q_learning.table.size()) {
+    if (state >= 0 && static_cast<size_t>(state) < q_learning.table.size()) {
         return distance(q_learning.table[state].begin(),
                       max_element(q_learning.table[state].begin(), q_learning.table[state].end()));
     }
@@ -347,8 +347,8 @@ int chooseAction(int x, int y, int current_dir) {
 }
 
 void updateQTable(int old_state, int action, int new_state, float reward) {
-    if (old_state >= 0 && old_state < q_learning.table.size() && 
-        new_state >= 0 && new_state < q_learning.table.size()) {
+    if (old_state >= 0 && static_cast<size_t>(old_state) < q_learning.table.size() && 
+    new_state >= 0 && static_cast<size_t>(new_state) < q_learning.table.size()) {
         float best_future = *max_element(q_learning.table[new_state].begin(), 
                                        q_learning.table[new_state].end());
         q_learning.table[old_state][action] = 
@@ -376,8 +376,8 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
     reward += (prev_dist - new_dist) * 5.0f;
     
     // Body avoidance (more sophisticated)
-    for (int i = 1; i < game.body.size(); i++) {
-        float dist = sqrt(pow(x-game.body[i][0], 2) + pow(y-game.body[i][1], 2);
+    for (size_t i = 1; i < game.body.size(); i++) {
+        float dist = sqrt(pow(x-game.body[i][0], 2) + pow(y-game.body[i][1], 2));
         if (dist < 3) reward -= (3-dist) * 10.0f;
     }
     
@@ -502,12 +502,12 @@ bool moveSnake(int& direction) {
     }
 
     game.trail.insert(game.trail.begin(), {game.head_x, game.head_y});
-    if (game.trail.size() > game.length + 2) {
+    if (game.trail.size() > static_cast<size_t>(game.length + 2)) {
         game.trail.resize(game.length + 2);
     }
 
     game.body.insert(game.body.begin(), {game.head_x, game.head_y});
-    if (game.body.size() > game.length) {
+    if (game.body.size() > static_cast<size_t>(game.length)) {
         game.body.resize(game.length);
     }
 
