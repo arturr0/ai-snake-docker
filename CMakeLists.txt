@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Explicitly set source files
-set(SOURCE_FILES src/main.cpp)
+file(GLOB SOURCE_FILES "src/*.cpp")
 
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
