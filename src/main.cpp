@@ -83,6 +83,16 @@ QLearning q_learning;
 Performance performance;
 SDLResources sdl;
 
+void spawnFood() {
+    auto all_positions = generateAllPositions();
+    auto free_positions = getFreePositions(game.trail, all_positions);
+    if (!free_positions.empty()) {
+        int k = rand() % free_positions.size();
+        game.food_x = free_positions[k][0];
+        game.food_y = free_positions[k][1];
+    }
+}
+
 #ifdef __EMSCRIPTEN__
 EM_JS(void, initChartJS, (), {
     if (typeof window.chartsInitialized === 'undefined') {
