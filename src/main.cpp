@@ -37,6 +37,7 @@ struct GameState {
     int speed = 200;
     vector<vector<int>> body;
     vector<vector<int>> trail;
+    int lifetime_score = 0;  // Track total score across resets
 };
 
 // Q-learning parameters
@@ -91,12 +92,16 @@ EM_JS(void, initChartJS, (), {
         qValueCanvas.id = 'qValueChart';
         container.appendChild(qValueCanvas);
 
+        var lifetimeCanvas = document.createElement('canvas');
+        lifetimeCanvas.id = 'lifetimeChart';
+        container.appendChild(lifetimeCanvas);
+
         window.scoreChart = new Chart(scoreCanvas, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Score',
+                    label: 'Episode Score',
                     data: [],
                     borderColor: 'rgba(75, 192, 192, 1)',
                     borderWidth: 1,
@@ -134,27 +139,66 @@ EM_JS(void, initChartJS, (), {
                 }
             }
         });
+
+        window.lifetimeChart = new Chart(lifetimeCanvas, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Lifetime Score',
+                    data: [],
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
     });
 });
 
-EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration), {
+EM_JS(void, updateCharts, (int episode, int score, float avg_q, float exploration, int lifetime_score), {
     try {
         var statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.innerHTML = 
-                `Episode: ${episode} | Score: ${score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
+                `Episode: ${episode} | Score: ${score} | Lifetime: ${lifetime_score} | Avg Q: ${avg_q.toFixed(2)} | Exploration: ${exploration.toFixed(2)}`;
         }
         
-        if (window.scoreChart && window.qValueChart) {
+        if (window.scoreChart && window.qValueChart && window.lifetimeChart) {
             // Update score chart
             window.scoreChart.data.labels.push(episode);
             window.scoreChart.data.datasets[0].data.push(score);
+            if (window.scoreChart.data.labels.length > 1000) {
+                window.scoreChart.data.labels.shift();
+                window.scoreChart.data.datasets[0].data.shift();
+            }
             window.scoreChart.update();
             
             // Update Q value chart
             window.qValueChart.data.labels.push(episode);
             window.qValueChart.data.datasets[0].data.push(avg_q);
+            if (window.qValueChart.data.labels.length > 1000) {
+                window.qValueChart.data.labels.shift();
+                window.qValueChart.data.datasets[0].data.shift();
+            }
             window.qValueChart.update();
+            
+            // Update lifetime score chart
+            window.lifetimeChart.data.labels.push(episode);
+            window.lifetimeChart.data.datasets[0].data.push(lifetime_score);
+            if (window.lifetimeChart.data.labels.length > 1000) {
+                window.lifetimeChart.data.labels.shift();
+                window.lifetimeChart.data.datasets[0].data.shift();
+            }
+            window.lifetimeChart.update();
         }
     } catch(e) {
         console.error('Chart update error:', e);
@@ -192,8 +236,9 @@ bool isValidPosition(int x, int y) {
     return x >= 0 && x < HEIGHT && y >= 0 && y < WIDTH;
 }
 
-bool isBodyPosition(int x, int y) {
-    for (const auto& seg : game.body) {
+bool isBodyPosition(int x, int y, bool include_head = true) {
+    for (size_t i = include_head ? 0 : 1; i < game.body.size(); ++i) {
+        const auto& seg = game.body[i];
         if (seg.size() == 2 && seg[0] == x && seg[1] == y) {
             return true;
         }
@@ -221,10 +266,10 @@ int getStateIndex(int x, int y, int dir) {
     else if (game.food_y < y) food_dir |= 8;
     
     int danger = 0;
-    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y)) danger |= 1;
-    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y)) danger |= 2;
-    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1)) danger |= 4;
-    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1)) danger |= 8;
+    if (!isValidPosition(x-1, y) || isBodyPosition(x-1, y, false)) danger |= 1;
+    if (!isValidPosition(x+1, y) || isBodyPosition(x+1, y, false)) danger |= 2;
+    if (!isValidPosition(x, y-1) || isBodyPosition(x, y-1, false)) danger |= 4;
+    if (!isValidPosition(x, y+1) || isBodyPosition(x, y+1, false)) danger |= 8;
     
     return (y * WIDTH + x) * 256 + dir * 64 + food_dir * 4 + danger;
 }
@@ -263,7 +308,18 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
                     (y-game.food_y)*(y-game.food_y));
     float dist_reward = (prev_dist - new_dist) * 5.0f;
     
-    return dist_reward + 0.1f;
+    // Additional penalty for getting too close to own body
+    float body_penalty = 0.0f;
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            if (dx == 0 && dy == 0) continue;
+            if (isBodyPosition(x + dx, y + dy, false)) {
+                body_penalty -= 2.0f;
+            }
+        }
+    }
+    
+    return dist_reward + body_penalty + 0.1f;
 }
 
 void resetGame() {
@@ -312,7 +368,7 @@ bool moveSnake(int& direction) {
             case 3: new_y++; break;
         }
 
-        bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y);
+        bool valid = isValidPosition(new_x, new_y) && !isBodyPosition(new_x, new_y, false);
         bool got_food = (new_x == game.food_x && new_y == game.food_y);
         bool crashed = !valid;
 
@@ -333,7 +389,7 @@ bool moveSnake(int& direction) {
                     case 2: test_y--; break;
                     case 3: test_y++; break;
                 }
-                if (isValidPosition(test_x, test_y) && !isBodyPosition(test_x, test_y)) {
+                if (isValidPosition(test_x, test_y) && !isBodyPosition(test_x, test_y, false)) {
                     safe_actions.push_back(i);
                 }
             }
@@ -352,7 +408,8 @@ bool moveSnake(int& direction) {
         case 3: game.head_y++; break;
     }
 
-    if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y)) {
+    // Check for self-collision (excluding head)
+    if (!isValidPosition(game.head_x, game.head_y) || isBodyPosition(game.head_x, game.head_y, false)) {
         return true;
     }
 
@@ -362,12 +419,13 @@ bool moveSnake(int& direction) {
     }
 
     game.body.insert(game.body.begin(), {game.head_x, game.head_y});
-    if (game.body.size() > game.length + 1) {
-        game.body.resize(game.length + 1);
+    if (game.body.size() > game.length) {
+        game.body.resize(game.length);
     }
 
     if (game.head_x == game.food_x && game.head_y == game.food_y) {
         game.score++;
+        game.lifetime_score++;
         game.length++;
         spawnFood();
     }
@@ -420,14 +478,17 @@ void drawGame() {
     SDL_Rect food = {game.food_y * CELL_SIZE, game.food_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &food);
 
+    // Draw body segments
     SDL_SetRenderDrawColor(sdl.renderer, 0, 180, 0, 255);
-    for (const auto& seg : game.body) {
+    for (size_t i = 1; i < game.body.size(); i++) {
+        const auto& seg = game.body[i];
         if (seg.size() == 2) {
             SDL_Rect body = {seg[1] * CELL_SIZE, seg[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE};
             SDL_RenderFillRect(sdl.renderer, &body);
         }
     }
 
+    // Draw head
     SDL_SetRenderDrawColor(sdl.renderer, 0, 255, 0, 255);
     SDL_Rect head = {game.head_y * CELL_SIZE, game.head_x * CELL_SIZE, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(sdl.renderer, &head);
@@ -452,15 +513,14 @@ void logPerformance() {
         performance.lengths.push_back(game.length);
 
         #ifdef __EMSCRIPTEN__
-        updateCharts(q_learning.episodes, game.score, avg_q, q_learning.exploration_rate);
+        updateCharts(q_learning.episodes, game.score, avg_q, q_learning.exploration_rate, game.lifetime_score);
         #else
         cout << "Episode: " << q_learning.episodes 
              << " | Score: " << game.score 
+             << " | Lifetime: " << game.lifetime_score
              << " | Avg Q: " << avg_q
              << " | Exploration: " << q_learning.exploration_rate << endl;
         #endif
-
-        game.score = 0;
     }
 }
 
