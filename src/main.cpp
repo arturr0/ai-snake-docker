@@ -286,7 +286,7 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
         for (int dist = 1; dist <= 3; dist++) {
             int nx = x + directions[i][0] * dist;
             int ny = y + directions[i][1] * dist;
-            if (isValidPosition(nx, ny) {
+            if (isValidPosition(nx, ny)) {
                 if (isBodyPosition(nx, ny, false)) {
                     body_penalty -= 3.0f / dist; // Reduced from 5.0
                     break;
