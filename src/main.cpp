@@ -524,7 +524,7 @@ void mainLoop() {
     if (reset_timer > 0) {
         reset_timer--;
         if (reset_timer == 0) {
-            resetGame();
+            resetGame(false);
         }
         return;
     }
