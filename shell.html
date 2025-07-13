@@ -25,13 +25,25 @@
         }
         #game-canvas {
             display: block;
-            margin: 0 auto;
+            margin: 20px auto;
             background: black;
         }
         #loading {
             text-align: center;
             margin: 20px;
             font-size: 18px;
+        }
+        #chart-container {
+            margin-top: 20px;
+            background: #333;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .chart {
+            margin-bottom: 20px;
+            background: #222;
+            padding: 10px;
+            border-radius: 5px;
         }
         .hidden {
             display: none;
@@ -43,46 +55,62 @@
         <div id="loading">Loading WebAssembly application...</div>
         <div id="status" class="hidden">Loading game...</div>
         <canvas id="game-canvas" width="400" height="400" class="hidden"></canvas>
+        <div id="chart-container" class="hidden">
+            <div class="chart">
+                <canvas id="scoreChart"></canvas>
+            </div>
+            <div class="chart">
+                <canvas id="qValueChart"></canvas>
+            </div>
+            <div class="chart">
+                <canvas id="lifetimeChart"></canvas>
+            </div>
+        </div>
     </div>
 
-    <!-- This script block must come before the SCRIPT placeholder -->
     <script>
-    // This will be merged with Emscripten's generated Module object
-    var Module = Module || {};
-    Module.canvas = (function() {
-        var canvas = document.getElementById('game-canvas');
-        canvas.addEventListener('webglcontextlost', function(e) {
-            alert('WebGL context lost. Please reload the page.');
-            e.preventDefault();
-        }, false);
-        return canvas;
-    })();
-    Module.onRuntimeInitialized = function() {
-        // Hide loading indicator
-        var loadingElement = document.getElementById('loading');
-        if (loadingElement) loadingElement.classList.add('hidden');
+    var Module = {
+        canvas: (function() {
+            var canvas = document.getElementById('game-canvas');
+            canvas.addEventListener('webglcontextlost', function(e) {
+                alert('WebGL context lost. Please reload the page.');
+                e.preventDefault();
+            }, false);
+            return canvas;
+        })(),
         
-        // Show game elements
-        var statusElement = document.getElementById('status');
-        var canvasElement = document.getElementById('game-canvas');
+        onRuntimeInitialized: function() {
+            // Hide loading indicator
+            var loadingElement = document.getElementById('loading');
+            if (loadingElement) loadingElement.classList.add('hidden');
+            
+            // Show game elements
+            var statusElement = document.getElementById('status');
+            var canvasElement = document.getElementById('game-canvas');
+            var chartContainer = document.getElementById('chart-container');
+            
+            if (statusElement) {
+                statusElement.classList.remove('hidden');
+                statusElement.textContent = 'Game loaded - training started';
+            }
+            
+            if (canvasElement) {
+                canvasElement.classList.remove('hidden');
+            }
+            
+            if (chartContainer) {
+                chartContainer.classList.remove('hidden');
+            }
+        },
         
-        if (statusElement) {
-            statusElement.classList.remove('hidden');
-            statusElement.textContent = 'Game loaded - training started';
+        printErr: function(text) {
+            console.error(text);
+            var statusElement = document.getElementById('status');
+            if (statusElement) statusElement.textContent = 'Error: ' + text;
         }
-        
-        if (canvasElement) {
-            canvasElement.classList.remove('hidden');
-        }
-    };
-    Module.printErr = function(text) {
-        console.error(text);
-        var statusElement = document.getElementById('status');
-        if (statusElement) statusElement.textContent = 'Error: ' + text;
     };
     </script>
 
-    <!-- This MUST be present for Emscripten -->
     {{{ SCRIPT }}}
 </body>
 </html>
