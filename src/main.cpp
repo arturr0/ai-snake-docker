@@ -583,8 +583,7 @@ int main() {
 
         if (q_learning.episodes < MAX_TRAINING_EPISODES) {
             q_learning.episodes++;
-            q_learning.exploration_rate = max(MIN_EXPLORATION, 
-                                            q_learning.exploration_rate * q_learning.exploration_decay);
+            q_learning.exploration_rate = max(MIN_EXPLORATION, q_learning.exploration_rate * q_learning.exploration_decay);
             logPerformance();
         }
 
