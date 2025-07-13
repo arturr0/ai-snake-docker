@@ -16,17 +16,18 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
     )
     
-    # Linker options using target_link_options (modern CMake)
-    add_executable(aisnake_web ${SOURCE_FILES})
-    
-    target_link_options(aisnake_web PRIVATE
-        --shell-file=${CMAKE_SOURCE_DIR}/shell.html
-        -sEXPORTED_FUNCTIONS=_main,_getExplorationRate,_getStats
-        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
-        -sMODULARIZE=1
-        -sALLOW_MEMORY_GROWTH=1
-        -sUSE_SDL=2  # This must be in both compile and link flags
+    # Linker options
+    set(CMAKE_EXE_LINKER_FLAGS
+        "${CMAKE_EXE_LINKER_FLAGS} "
+        "--shell-file ${CMAKE_SOURCE_DIR}/shell.html "
+        "-sEXPORTED_FUNCTIONS=_main,_getExplorationRate,_getStats "
+        "-sEXPORTED_RUNTIME_METHODS=ccall,cwrap "
+        "-sMODULARIZE=1 "
+        "-sALLOW_MEMORY_GROWTH=1 "
+        "-sUSE_SDL=2"
     )
+    
+    add_executable(aisnake_web ${SOURCE_FILES})
 else()
     find_package(SDL2 REQUIRED)
     include_directories(${SDL2_INCLUDE_DIRS})
