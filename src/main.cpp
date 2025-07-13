@@ -305,7 +305,7 @@ float calculateReward(int prev_x, int prev_y, int x, int y, bool got_food, bool 
         int nx = x + directions[i][0];
         int ny = y + directions[i][1];
         int dist = 1;
-        while (isValidPosition(nx, ny) {
+        while (isValidPosition(nx, ny)) {
             if (isBodyPosition(nx, ny, false)) {
                 body_penalty -= 5.0f / dist; // Stronger penalty for closer body parts
                 break;
